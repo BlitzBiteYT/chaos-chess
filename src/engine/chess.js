@@ -238,11 +238,16 @@
       const ok = findKing(b, !w);
       if (!(ok && attacked(b, ok[0], ok[1], me))) turn = me;
     }
+    const dest = td || [m.tr, m.tf];
+    const same = (s, r, f) => !!s && s[0] === r && s[1] === f;
     let bounty = p.bounty;
     if (bounty && bounty.sq) {
-      if (bounty.sq[0] === m.r && bounty.sq[1] === m.f) {
-        bounty = { ...bounty, sq: [m.tr, m.tf] };
-      } else if (bounty.sq[0] === m.tr && bounty.sq[1] === m.tf) {
+      const rk = m.castle ? [m.r, m.castle === 'k' ? 7 : 0, m.castle === 'k' ? 5 : 3] : null;
+      if (same(bounty.sq, m.r, m.f)) {
+        bounty = { ...bounty, sq: dest };
+      } else if (rk && same(bounty.sq, rk[0], rk[1])) {
+        bounty = { ...bounty, sq: [rk[0], rk[2]] };
+      } else if (same(bounty.sq, m.tr, m.tf)) {
         const capRow = w ? b.length - 2 : 1;
         const pawnChar = w ? 'P' : 'p';
         for (let f = 0; f < 8; f++) {
@@ -254,17 +259,13 @@
         bounty = null;
       }
     }
+    // Overcharge markers follow their piece; capturing the enemy's marked piece clears it
     let overcharged = p.overcharged;
     if (overcharged) {
-      if (w && overcharged.w && overcharged.w[0] === m.r && overcharged.w[1] === m.f) {
-        overcharged = { ...overcharged, w: [m.tr, m.tf] };
-      } else if (!w && overcharged.b && overcharged.b[0] === m.r && overcharged.b[1] === m.f) {
-        overcharged = { ...overcharged, b: [m.tr, m.tf] };
-      } else if (w && overcharged.b && overcharged.b[0] === m.tr && overcharged.b[1] === m.tf) {
-        overcharged = { ...overcharged, b: null };
-      } else if (!w && overcharged.w && overcharged.w[0] === m.tr && overcharged.w[1] === m.tf) {
-        overcharged = { ...overcharged, w: null };
-      }
+      const mine = w ? 'w' : 'b', theirs = w ? 'b' : 'w', o = { ...overcharged };
+      if (same(o[mine], m.r, m.f)) o[mine] = dest;
+      if (same(o[theirs], m.tr, m.tf)) o[theirs] = null;
+      overcharged = o;
     }
     return {
       b,
