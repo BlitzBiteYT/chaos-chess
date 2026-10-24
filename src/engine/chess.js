@@ -98,6 +98,7 @@
         if (!c || isW(c) !== w) continue;
         const t = c.toLowerCase();
         const add = (tr, tf, x) => out.push({ r, f, tr, tf, ...x });
+        const isOv = p.overcharged && ((w && p.overcharged.w && p.overcharged.w[0] === r && p.overcharged.w[1] === f) || (!w && p.overcharged.b && p.overcharged.b[0] === r && p.overcharged.b[1] === f));
         if (t === 'p') {
           const d = w ? -1 : 1, start = w ? nr - 2 : 1, last = w ? 0 : nr - 1;
           const push = (tr, tf, x) => {
@@ -124,6 +125,14 @@
             if (!inb(tr, tf, nr)) continue;
             const x = b[tr][tf];
             if (!x || isW(x) !== w) add(tr, tf, {});
+          }
+          if (t === 'n' && isOv) {
+            for (const [d, e] of KG) {
+              const tr = r + d, tf = f + e;
+              if (!inb(tr, tf, nr)) continue;
+              const x = b[tr][tf];
+              if (!x || isW(x) !== w) add(tr, tf, {});
+            }
           }
           if (t === 'k') {
             const row = w ? nr - 1 : 0, opp = w ? 'b' : 'w';
@@ -152,6 +161,14 @@
               tf += e;
             }
           }
+          if (t === 'b' && isOv) {
+            for (const [d, e] of ST) {
+              const tr = r + d, tf = f + e;
+              if (!inb(tr, tf, nr)) continue;
+              const x = b[tr][tf];
+              if (!x || isW(x) !== w) add(tr, tf, {});
+            }
+          }
         }
       }
     }
@@ -164,9 +181,9 @@
     if (mg && mg.length) {
       filtered = filtered.filter(m => !mg.some(s => m.tr === s[0] && m.tf === s[1]));
     }
-    const ph = p.phantom && p.phantom.sq;
-    if (ph) {
-      filtered = filtered.filter(m => !(m.tr === ph[0] && m.tf === ph[1]));
+    const phSqs = p.phantom && (p.phantom.sqs || (p.phantom.sq ? [p.phantom.sq] : []));
+    if (phSqs && phSqs.length) {
+      filtered = filtered.filter(m => !phSqs.some(s => m.tr === s[0] && m.tf === s[1]));
     }
     return filtered;
   }
@@ -226,7 +243,27 @@
       if (bounty.sq[0] === m.r && bounty.sq[1] === m.f) {
         bounty = { ...bounty, sq: [m.tr, m.tf] };
       } else if (bounty.sq[0] === m.tr && bounty.sq[1] === m.tf) {
+        const capRow = w ? b.length - 2 : 1;
+        const pawnChar = w ? 'P' : 'p';
+        for (let f = 0; f < 8; f++) {
+          if (!b[capRow][f]) {
+            b[capRow][f] = pawnChar;
+            break;
+          }
+        }
         bounty = null;
+      }
+    }
+    let overcharged = p.overcharged;
+    if (overcharged) {
+      if (w && overcharged.w && overcharged.w[0] === m.r && overcharged.w[1] === m.f) {
+        overcharged = { ...overcharged, w: [m.tr, m.tf] };
+      } else if (!w && overcharged.b && overcharged.b[0] === m.r && overcharged.b[1] === m.f) {
+        overcharged = { ...overcharged, b: [m.tr, m.tf] };
+      } else if (w && overcharged.b && overcharged.b[0] === m.tr && overcharged.b[1] === m.tf) {
+        overcharged = { ...overcharged, b: null };
+      } else if (!w && overcharged.w && overcharged.w[0] === m.tr && overcharged.w[1] === m.tf) {
+        overcharged = { ...overcharged, w: null };
       }
     }
     return {
@@ -243,7 +280,7 @@
       magma: p.magma,
       phantom: p.phantom,
       bounty,
-      overcharged: p.overcharged
+      overcharged
     };
   }
 

@@ -39,7 +39,7 @@
     };
   }
 
-  const CH = { start: 9, every: 5, burst: 1, mult: 1 };
+  const CH = { start: 5, every: 5, burst: 1, mult: 1 };
   const clonePos = p => ({ ...p, b: p.b.map(r => r.slice()) });
 
   const emptySqs = (p, r0, r1) => {
@@ -569,7 +569,7 @@
       }
     },
     {
-      id: 'blackhole', name: 'Black Hole', color: '#7c3aed', sound: 'quake', desc: 'A cosmic singularity pulls pieces 1 square inward toward the center.',
+      id: 'blackhole', name: 'Black Hole', color: '#7c3aed', sound: 'quake', desc: 'A cosmic singularity pulls pieces inward toward the center.',
       canFire: p => {
         const nr = p.b.length;
         for (let r = 0; r < nr; r++) {
@@ -589,21 +589,24 @@
       apply(p) {
         const q = clonePos(p), nr = q.b.length, slides = [];
         q.ep = null;
-        const rOrder = [...Array(nr).keys()].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
-        const fOrder = [0, 1, 2, 3, 4, 5, 6, 7].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
-        for (const r of rOrder) {
-          for (const f of fOrder) {
-            const c = q.b[r][f];
-            if (!c || c.toLowerCase() === 'k') continue;
-            const dr = r < 3 ? 1 : (r > 4 ? -1 : 0);
-            const df = f < 3 ? 1 : (f > 4 ? -1 : 0);
-            if (!dr && !df) continue;
-            const tr = r + dr, tf = f + df;
-            if (inb(tr, tf, nr) && !q.b[tr][tf]) {
-              if (c.toLowerCase() === 'p' && (tr === 0 || tr === nr - 1)) continue;
-              q.b[tr][tf] = c;
-              q.b[r][f] = null;
-              slides.push({ from: [r, f], to: [tr, tf] });
+        const steps = Math.min(CH.mult || 1, 2);
+        for (let step = 0; step < steps; step++) {
+          const rOrder = [...Array(nr).keys()].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
+          const fOrder = [0, 1, 2, 3, 4, 5, 6, 7].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
+          for (const r of rOrder) {
+            for (const f of fOrder) {
+              const c = q.b[r][f];
+              if (!c || c.toLowerCase() === 'k') continue;
+              const dr = r < 3 ? 1 : (r > 4 ? -1 : 0);
+              const df = f < 3 ? 1 : (f > 4 ? -1 : 0);
+              if (!dr && !df) continue;
+              const tr = r + dr, tf = f + df;
+              if (inb(tr, tf, nr) && !q.b[tr][tf]) {
+                if (c.toLowerCase() === 'p' && (tr === 0 || tr === nr - 1)) continue;
+                q.b[tr][tf] = c;
+                q.b[r][f] = null;
+                slides.push({ from: [r, f], to: [tr, tf] });
+              }
             }
           }
         }
@@ -622,21 +625,30 @@
       }
     },
     {
-      id: 'phantom', name: 'Phantom Split', color: '#06b6d4', sound: 'warp', desc: 'A knight or bishop projects an illusory decoy onto an adjacent square.',
+      id: 'phantom', name: 'Phantom Split', color: '#06b6d4', sound: 'warp', desc: 'Illusory decoys project onto squares, blocking movement.',
       canFire: p => pieceList(p, c => 'nb'.includes(c.toLowerCase())).length > 0 && emptySqs(p, 1, 6).length > 0,
       apply(p, rand) {
-        const q = clonePos(p), opts = pieceList(q, c => 'nb'.includes(c.toLowerCase()));
-        const [r, f] = opts[Math.floor(rand() * opts.length)];
-        const adj = [];
-        for (const dr of [-1, 0, 1]) {
-          for (const df of [-1, 0, 1]) {
-            if (!dr && !df) continue;
-            if (inb(r + dr, f + df, q.b.length) && !q.b[r + dr][f + df]) adj.push([r + dr, f + df]);
+        const q = clonePos(p), opts = pieceList(q, c => 'nb'.includes(c.toLowerCase())).slice();
+        const count = Math.min(CH.mult || 1, opts.length);
+        const sqs = [];
+        const e = emptySqs(q, 1, 6).slice();
+        for (let i = 0; i < count && opts.length > 0 && e.length > 0; i++) {
+          const oIdx = Math.floor(rand() * opts.length);
+          const [r, f] = opts.splice(oIdx, 1)[0];
+          const adj = [];
+          for (const dr of [-1, 0, 1]) {
+            for (const df of [-1, 0, 1]) {
+              if (!dr && !df) continue;
+              if (inb(r + dr, f + df, q.b.length) && !q.b[r + dr][f + df] && !sqs.some(s => s[0] === r + dr && s[1] === f + df)) {
+                adj.push([r + dr, f + df]);
+              }
+            }
           }
+          const target = adj.length ? adj[Math.floor(rand() * adj.length)] : pickOut(e, rand);
+          sqs.push(target);
         }
-        const target = adj.length ? adj[Math.floor(rand() * adj.length)] : pickOut(emptySqs(q, 1, 6), rand);
-        q.phantom = { sq: target, source: [r, f], ttl: 4 };
-        return { p: q, pops: [target] };
+        q.phantom = { sqs, sq: sqs[0], ttl: 4 };
+        return { p: q, pops: sqs };
       }
     },
     {
@@ -651,22 +663,22 @@
       }
     },
     {
-      id: 'necromancy', name: 'Necromancy', color: '#10b981', sound: 'portal', desc: 'A fallen piece rises from the dead onto an empty square on its back rank.',
+      id: 'necromancy', name: 'Necromancy', color: '#10b981', sound: 'portal', desc: 'Fallen pieces rise from the dead onto empty squares on the back rank.',
       canFire: p => {
         const nr = p.b.length;
-        const wEmpty = [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[nr - 1][f]);
-        const bEmpty = [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[0][f]);
-        return wEmpty && bEmpty;
+        return [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[nr - 1][f] || !p.b[0][f]);
       },
       apply(p, rand) {
         const q = clonePos(p), nr = q.b.length, pops = [];
         q.ep = null;
+        const count = CH.mult || 1;
         for (const w of [true, false]) {
           const row = w ? nr - 1 : 0;
           const openCols = [];
           for (let f = 0; f < 8; f++) if (!q.b[row][f]) openCols.push(f);
-          if (openCols.length) {
-            const f = openCols[Math.floor(rand() * openCols.length)];
+          for (let i = 0; i < count && openCols.length > 0; i++) {
+            const idx = Math.floor(rand() * openCols.length);
+            const f = openCols.splice(idx, 1)[0];
             const resurrected = rand() < .5 ? 'n' : 'b';
             q.b[row][f] = w ? resurrected.toUpperCase() : resurrected;
             pops.push([row, f]);
@@ -846,8 +858,8 @@
   }
 
   const PRE = {
-    mild: { every: 7, burst: 1, mult: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'fog', 'mutate', 'bounty', 'phantom'] },
-    wild: { every: 5, burst: 1, mult: 2, ev: ['quake', 'portal', 'frozen', 'swap', 'rush', 'fog', 'dtime', 'zap', 'mutate', 'mirror', 'reinforce', 'trade', 'coronate', 'blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'] },
+    mild: { every: 7, burst: 1, mult: 1, ev: EVENTS.map(e => e.id) },
+    wild: { every: 5, burst: 1, mult: 2, ev: EVENTS.map(e => e.id) },
     mayhem: { every: 3, burst: 2, mult: 3, ev: EVENTS.map(e => e.id) }
   };
 

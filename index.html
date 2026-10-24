@@ -275,8 +275,8 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
 .cs label{display:flex;align-items:center;gap:8px}
 .cs select{font:inherit;padding:6px 8px;border-radius:8px;background:var(--surface-alt);color:var(--ink);border:1px solid var(--border)}
 .evs{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
-#guide,#changelog{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:50;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:20px}
-#guide[hidden],#changelog[hidden]{display:none !important}
+#guide,#changelog,#settingsModal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:50;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:20px}
+#guide[hidden],#changelog[hidden],#settingsModal[hidden]{display:none !important}
 .gbox{background:var(--surface);color:var(--ink);border:1px solid var(--border-light);border-radius:14px;padding:20px;width:min(100%,700px);font-size:.9rem;line-height:1.5}
 .gbox h2{margin:0 0 8px}
 .gc{border-top:1px solid var(--border);padding:12px 0}
@@ -425,7 +425,18 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
           <label>Events per chaos <select id="burst"><option>1</option><option>2</option><option>3</option></select></label>
           <label>Event multiplier <select id="mult"><option value="1">1x (Standard)</option><option value="2">2x (Double Impact)</option><option value="3">3x (Extreme Mayhem)</option></select></label>
           <label><input id="chaosDraft" type="checkbox"> Chaos Draft (Choose from 2 events when meter hits 0)</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+            <b style="font-size:0.82rem;">Event Pool:</b>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="btnOnlyNew" class="cc-btn cc-btn-subtle" style="padding:4px 8px; font-size:0.75rem; color:#c084fc;">✨ Only New Events (6)</button>
+              <button type="button" id="btnAllEvs" class="cc-btn cc-btn-subtle" style="padding:4px 8px; font-size:0.75rem;">All 28</button>
+            </div>
+          </div>
           <div class="evs" id="evs"></div>
+          <div style="display:flex; gap:6px; margin-top:6px; align-items:center;">
+            <select id="triggerEvSelect" style="flex:1; font-size:0.82rem; padding:4px 6px;"></select>
+            <button type="button" id="btnTriggerEv" class="cc-btn cc-btn-primary" style="padding:5px 10px; font-size:0.78rem; white-space:nowrap;">⚡ Test Event</button>
+          </div>
         </section>
       </div>
       <div class="lobby-box">
@@ -571,10 +582,55 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
         <button id="new" type="button">New game</button>
         <button id="snd" type="button">Sound: on</button>
         <button id="guideBtn" type="button">Events guide</button>
+        <button id="gameSettingsBtn" type="button" style="border-color:var(--cc-accent); color:var(--cc-accent); font-weight:700;">⚙️ Settings</button>
       </div>
     </div>
   </div>
 </main>
+
+<!-- In-Game Settings Modal -->
+<div id="settingsModal" hidden>
+  <div class="gbox" style="max-width: 600px; margin: auto;">
+    <button id="smclose" type="button" style="float:right; border:1px solid var(--border); border-radius:6px; background:var(--surface-alt); color:var(--ink); padding:6px 12px; cursor:pointer;">✕ Close</button>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span style="font-size:1.3rem;">⚡</span>
+      <h2 style="margin:0;">Chaos &amp; Event Settings</h2>
+    </div>
+
+    <section class="cs" style="gap:12px;">
+      <label><input id="chaosOnM" type="checkbox" checked> Chaos mode (uncheck for Classic)</label>
+      <label>Intensity <select id="intM"><option value="mild">Mild (1x)</option><option value="wild">Wild (2x)</option><option value="mayhem">Mayhem (3x)</option><option value="custom">Custom</option></select></label>
+      <label>Event every <select id="freqM"><option>3</option><option selected>5</option><option>7</option></select> moves</label>
+      <label>Events per chaos <select id="burstM"><option>1</option><option>2</option><option>3</option></select></label>
+      <label>Event multiplier <select id="multM"><option value="1">1x (Standard)</option><option value="2">2x (Double Impact)</option><option value="3">3x (Extreme Mayhem)</option></select></label>
+      <label><input id="chaosDraftM" type="checkbox"> Chaos Draft (Choose from 2 events when meter hits 0)</label>
+
+      <div style="margin-top:8px; padding-top:10px; border-top:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <b style="font-size:0.88rem;">Active Events Filter:</b>
+          <div style="display:flex; gap:6px;">
+            <button type="button" id="btnOnlyNewM" class="cc-btn cc-btn-subtle" style="padding:4px 8px; font-size:0.75rem; color:#c084fc;">✨ Only New Events (6)</button>
+            <button type="button" id="btnAllEvsM" class="cc-btn cc-btn-subtle" style="padding:4px 8px; font-size:0.75rem;">All 28 Events</button>
+          </div>
+        </div>
+        <div class="evs" id="evsM" style="max-height:200px; overflow-y:auto; padding-right:4px;"></div>
+      </div>
+
+      <div style="margin-top:10px; padding:12px; background:var(--surface-alt); border-radius:10px; border:1px solid var(--border);">
+        <b style="display:block; margin-bottom:6px; font-size:0.86rem; color:#f59e0b;">⚡ Instant Event Trigger (Test Board Now)</b>
+        <p style="margin:0 0 8px; font-size:0.78rem; color:var(--muted);">Select any event below and test it on the live board right now:</p>
+        <div style="display:flex; gap:8px;">
+          <select id="triggerEvSelectM" style="flex:1; padding:6px; border-radius:6px; background:var(--surface); color:var(--ink); border:1px solid var(--border);"></select>
+          <button type="button" id="btnTriggerEvM" class="cc-btn cc-btn-primary" style="padding:6px 14px; font-weight:700; white-space:nowrap;">⚡ Fire Now</button>
+        </div>
+      </div>
+    </section>
+
+    <div style="margin-top:16px; text-align:right;">
+      <button id="smcloseBottom" type="button" class="cc-btn cc-btn-primary" style="padding:8px 18px;">Apply &amp; Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- Events Guide Modal -->
 <div id="guide" hidden><div class="gbox">
@@ -1079,7 +1135,7 @@ function paintFx() {
     p.portal && [p.portal.a, p.portal.b],
     p.frozen && (p.frozen.sqs || p.frozen.sq),
     p.magma && p.magma.sqs,
-    p.phantom && p.phantom.sq,
+    p.phantom && (p.phantom.sqs || p.phantom.sq),
     flipped,
     UR
   ]);
@@ -1092,7 +1148,10 @@ function paintFx() {
     sqs.forEach(sq => add('ice', ...sq));
   }
   if (p.magma && p.magma.sqs) p.magma.sqs.forEach(sq => add('magma', ...sq));
-  if (p.phantom && p.phantom.sq) add('phantom', ...p.phantom.sq);
+  if (p.phantom) {
+    const sqs = p.phantom.sqs || (p.phantom.sq ? [p.phantom.sq] : []);
+    sqs.forEach(sq => add('phantom', ...sq));
+  }
 }
 
 function applyFog() {
@@ -1425,7 +1484,7 @@ function applyOnlineMatchState(match) {
   if (match.chaosSettings) {
     chaosOn = match.chaosSettings.on !== false;
     CH.every = match.chaosSettings.every || 5;
-    CH.start = CH.every + 4;
+    CH.start = CH.every;
     CH.burst = match.chaosSettings.burst || 1;
   }
 
@@ -1616,47 +1675,258 @@ document.getElementById('stress').addEventListener('click', chaosStress);
 document.getElementById('play10').addEventListener('click', playtest);
 
 // Chaos settings
-const SKEY = 'chaosChessSettings', freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'), burstEl = document.getElementById('burst'), multEl = document.getElementById('mult'), draftEl = document.getElementById('chaosDraft');
+const SKEY = 'chaosChessSettings',
+  freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'),
+  burstEl = document.getElementById('burst'), multEl = document.getElementById('mult'), draftEl = document.getElementById('chaosDraft'),
+  intEl = document.getElementById('int');
+
+// In-game Settings Modal elements
+const settingsModalEl = document.getElementById('settingsModal'),
+  gameSettingsBtn = document.getElementById('gameSettingsBtn'),
+  smclose = document.getElementById('smclose'), smcloseBottom = document.getElementById('smcloseBottom'),
+  cOnMEl = document.getElementById('chaosOnM'), intMEl = document.getElementById('intM'),
+  freqMEl = document.getElementById('freqM'), burstMEl = document.getElementById('burstM'),
+  multMEl = document.getElementById('multM'), draftMEl = document.getElementById('chaosDraftM'),
+  evsMEl = document.getElementById('evsM');
+
+// Quick filters & Instant trigger elements
+const btnOnlyNew = document.getElementById('btnOnlyNew'), btnAllEvs = document.getElementById('btnAllEvs'),
+  btnOnlyNewM = document.getElementById('btnOnlyNewM'), btnAllEvsM = document.getElementById('btnAllEvsM'),
+  triggerEvSelect = document.getElementById('triggerEvSelect'), triggerEvSelectM = document.getElementById('triggerEvSelectM'),
+  btnTriggerEv = document.getElementById('btnTriggerEv'), btnTriggerEvM = document.getElementById('btnTriggerEvM');
+
 let chaosDraftOn = false;
-function saveSet() { try { localStorage.setItem(SKEY, JSON.stringify({ int: intEl.value, on: chaosOn, every: CH.every, burst: CH.burst, mult: CH.mult, draft: chaosDraftOn, off: EVENTS.filter(e => !e.on).map(e => e.id) })); } catch (e) {} }
+
+function openSettingsModal() {
+  if (settingsModalEl) {
+    settingsModalEl.hidden = false;
+    settingsModalEl.style.display = 'flex';
+    settingsModalEl.scrollTop = 0;
+  }
+}
+function closeSettingsModal() {
+  if (settingsModalEl) {
+    settingsModalEl.hidden = true;
+    settingsModalEl.style.display = 'none';
+  }
+}
+if (gameSettingsBtn) gameSettingsBtn.addEventListener('click', openSettingsModal);
+if (smclose) smclose.addEventListener('click', closeSettingsModal);
+if (smcloseBottom) smcloseBottom.addEventListener('click', closeSettingsModal);
+if (settingsModalEl) settingsModalEl.addEventListener('click', e => {
+  if (e.target === settingsModalEl) closeSettingsModal();
+});
+
+function populateTriggerSelects() {
+  const opts = EVENTS.map(e => '<option value="' + e.id + '">' + e.name + '</option>').join('');
+  if (triggerEvSelect) triggerEvSelect.innerHTML = opts;
+  if (triggerEvSelectM) triggerEvSelectM.innerHTML = opts;
+}
+populateTriggerSelects();
+
+function fireSpecificEvent(evId) {
+  const ev = EVENTS.find(e => e.id === evId);
+  if (!ev) return;
+  const rand = mulberry(((Math.random() * 4e9) >>> 0));
+  let out, err;
+  for (let t = 0; t < 8; t++) {
+    out = ev.apply(G.pos, rand);
+    err = validate(G.pos, out.p);
+    if (!err) break;
+  }
+  if (err) {
+    toastEl.textContent = ev.name + ' fizzled: ' + err;
+    restart(toastEl, 'show');
+    return;
+  }
+  const before = posKey(G.pos), prev = G.pos;
+  G.pos = out.p;
+  evReset(G.pos, G.seen);
+  fireFx({ ev, ...out, changed: before !== posKey(G.pos), after: out.p, before: prev });
+  render();
+  chaosUI();
+}
+
+if (btnTriggerEv) btnTriggerEv.addEventListener('click', () => {
+  if (triggerEvSelect) fireSpecificEvent(triggerEvSelect.value);
+});
+if (btnTriggerEvM) btnTriggerEvM.addEventListener('click', () => {
+  if (triggerEvSelectM) {
+    fireSpecificEvent(triggerEvSelectM.value);
+    closeSettingsModal();
+  }
+});
+
+const NEW_IDS = ['blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'];
+function selectOnlyNewEvents() {
+  EVENTS.forEach(e => { e.on = NEW_IDS.includes(e.id); });
+  if (intEl) intEl.value = 'custom';
+  if (intMEl) intMEl.value = 'custom';
+  saveSet();
+  applySet({
+    on: chaosOn,
+    every: CH.every,
+    burst: CH.burst,
+    mult: CH.mult,
+    int: 'custom',
+    draft: chaosDraftOn,
+    off: EVENTS.filter(e => !e.on).map(e => e.id)
+  });
+  chaosUI();
+}
+function selectAllEvents() {
+  EVENTS.forEach(e => { e.on = true; });
+  saveSet();
+  applySet({
+    on: chaosOn,
+    every: CH.every,
+    burst: CH.burst,
+    mult: CH.mult,
+    int: intEl ? intEl.value : 'wild',
+    draft: chaosDraftOn,
+    off: []
+  });
+  chaosUI();
+}
+if (btnOnlyNew) btnOnlyNew.addEventListener('click', selectOnlyNewEvents);
+if (btnOnlyNewM) btnOnlyNewM.addEventListener('click', selectOnlyNewEvents);
+if (btnAllEvs) btnAllEvs.addEventListener('click', selectAllEvents);
+if (btnAllEvsM) btnAllEvsM.addEventListener('click', selectAllEvents);
+
+function saveSet() {
+  try {
+    const curInt = intEl ? intEl.value : (intMEl ? intMEl.value : 'wild');
+    localStorage.setItem(SKEY, JSON.stringify({
+      int: curInt,
+      on: chaosOn,
+      every: CH.every,
+      burst: CH.burst,
+      mult: CH.mult,
+      draft: chaosDraftOn,
+      off: EVENTS.filter(e => !e.on).map(e => e.id)
+    }));
+  } catch (e) {}
+}
+
 function applySet(s) {
-  chaosOn = s.on !== false; CH.every = [3, 5, 7].includes(s.every) ? s.every : 5; CH.start = CH.every + 4; CH.burst = [1, 2, 3].includes(s.burst) ? s.burst : 1;
+  chaosOn = s.on !== false;
+  CH.every = [3, 5, 7].includes(s.every) ? s.every : 5;
+  CH.start = CH.every;
+  CH.burst = [1, 2, 3].includes(s.burst) ? s.burst : 1;
   CH.mult = [1, 2, 3].includes(s.mult) ? s.mult : (PRE[s.int] ? PRE[s.int].mult : 1);
   chaosDraftOn = !!s.draft;
   if (draftEl) draftEl.checked = chaosDraftOn;
+  if (draftMEl) draftMEl.checked = chaosDraftOn;
+
   EVENTS.forEach(e => { e.on = !(s.off || []).includes(e.id); });
   if (!EVENTS.some(e => e.on)) EVENTS.forEach(e => { e.on = true; });
-  cOnEl.checked = chaosOn; freqEl.value = CH.every; intEl.value = s.int || 'custom'; burstEl.value = CH.burst;
+
+  if (cOnEl) cOnEl.checked = chaosOn;
+  if (cOnMEl) cOnMEl.checked = chaosOn;
+  if (freqEl) freqEl.value = CH.every;
+  if (freqMEl) freqMEl.value = CH.every;
+  if (intEl) intEl.value = s.int || 'custom';
+  if (intMEl) intMEl.value = s.int || 'custom';
+  if (burstEl) burstEl.value = CH.burst;
+  if (burstMEl) burstMEl.value = CH.burst;
   if (multEl) multEl.value = CH.mult;
-  evsEl.innerHTML = '';
-  EVENTS.forEach(e => {
-    const l = document.createElement('label'), c = document.createElement('input'); c.type = 'checkbox'; c.checked = e.on;
-    c.addEventListener('change', () => {
-      e.on = c.checked;
-      if (!EVENTS.some(x => x.on)) { e.on = c.checked = true; return; }
-      if (G.chaos.next && !G.chaos.next.on) G.chaos.next = chaosPick(G);
-      intEl.value = 'custom'; saveSet(); chaosUI();
+  if (multMEl) multMEl.value = CH.mult;
+
+  const buildEvs = (targetEl) => {
+    if (!targetEl) return;
+    targetEl.innerHTML = '';
+    EVENTS.forEach(e => {
+      const l = document.createElement('label'), c = document.createElement('input');
+      c.type = 'checkbox';
+      c.checked = e.on;
+      c.addEventListener('change', () => {
+        e.on = c.checked;
+        if (!EVENTS.some(x => x.on)) { e.on = c.checked = true; return; }
+        if (G.chaos.next && !G.chaos.next.on) G.chaos.next = chaosPick(G);
+        if (intEl) intEl.value = 'custom';
+        if (intMEl) intMEl.value = 'custom';
+        saveSet();
+        chaosUI();
+        applySet({ ...s, int: 'custom', off: EVENTS.filter(x => !x.on).map(x => x.id) });
+      });
+      const isNew = NEW_IDS.includes(e.id);
+      l.append(c, ' ' + e.name + (isNew ? ' ✨' : ''));
+      if (isNew) l.style.color = '#c084fc';
+      targetEl.appendChild(l);
     });
-    l.append(c, ' ' + e.name); evsEl.appendChild(l);
-  });
+  };
+  buildEvs(evsEl);
+  buildEvs(evsMEl);
 }
-if (draftEl) draftEl.addEventListener('change', () => { chaosDraftOn = draftEl.checked; saveSet(); });
-cOnEl.addEventListener('change', saveSet);
-burstEl.addEventListener('change', () => { CH.burst = +burstEl.value; intEl.value = 'custom'; saveSet(); chaosUI(); });
-if (multEl) multEl.addEventListener('change', () => { CH.mult = +multEl.value; intEl.value = 'custom'; saveSet(); chaosUI(); });
-freqEl.addEventListener('change', () => {
-  CH.every = +freqEl.value; CH.start = CH.every + 4;
-  syncMeter();
-  intEl.value = 'custom'; saveSet(); chaosUI();
-});
-const intEl = document.getElementById('int');
-intEl.addEventListener('change', () => {
-  const v = intEl.value; if (!PRE[v]) return;
-  applySet(preObj(v));
+
+function onIntChange(val) {
+  if (!PRE[val]) return;
+  applySet(preObj(val));
   syncMeter();
   if (G.chaos.next && !G.chaos.next.on) G.chaos.next = chaosPick(G);
-  saveSet(); chaosUI();
-});
+  saveSet();
+  chaosUI();
+}
+if (intEl) intEl.addEventListener('change', () => onIntChange(intEl.value));
+if (intMEl) intMEl.addEventListener('change', () => onIntChange(intMEl.value));
+
+function onFreqChange(val) {
+  CH.every = +val;
+  CH.start = CH.every;
+  if (freqEl) freqEl.value = CH.every;
+  if (freqMEl) freqMEl.value = CH.every;
+  if (intEl) intEl.value = 'custom';
+  if (intMEl) intMEl.value = 'custom';
+  syncMeter();
+  saveSet();
+  chaosUI();
+}
+if (freqEl) freqEl.addEventListener('change', () => onFreqChange(freqEl.value));
+if (freqMEl) freqMEl.addEventListener('change', () => onFreqChange(freqMEl.value));
+
+function onBurstChange(val) {
+  CH.burst = +val;
+  if (burstEl) burstEl.value = CH.burst;
+  if (burstMEl) burstMEl.value = CH.burst;
+  if (intEl) intEl.value = 'custom';
+  if (intMEl) intMEl.value = 'custom';
+  saveSet();
+  chaosUI();
+}
+if (burstEl) burstEl.addEventListener('change', () => onBurstChange(burstEl.value));
+if (burstMEl) burstMEl.addEventListener('change', () => onBurstChange(burstMEl.value));
+
+function onMultChange(val) {
+  CH.mult = +val;
+  if (multEl) multEl.value = CH.mult;
+  if (multMEl) multMEl.value = CH.mult;
+  if (intEl) intEl.value = 'custom';
+  if (intMEl) intMEl.value = 'custom';
+  saveSet();
+  chaosUI();
+}
+if (multEl) multEl.addEventListener('change', () => onMultChange(multEl.value));
+if (multMEl) multMEl.addEventListener('change', () => onMultChange(multMEl.value));
+
+function onChaosToggle(checked) {
+  chaosOn = checked;
+  if (cOnEl) cOnEl.checked = chaosOn;
+  if (cOnMEl) cOnMEl.checked = chaosOn;
+  saveSet();
+  chaosUI();
+}
+if (cOnEl) cOnEl.addEventListener('change', () => onChaosToggle(cOnEl.checked));
+if (cOnMEl) cOnMEl.addEventListener('change', () => onChaosToggle(cOnMEl.checked));
+
+function onDraftToggle(checked) {
+  chaosDraftOn = checked;
+  if (draftEl) draftEl.checked = chaosDraftOn;
+  if (draftMEl) draftMEl.checked = chaosDraftOn;
+  saveSet();
+}
+if (draftEl) draftEl.addEventListener('change', () => onDraftToggle(draftEl.checked));
+if (draftMEl) draftMEl.addEventListener('change', () => onDraftToggle(draftMEl.checked));
+
 let saved = {}; try { saved = JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) {}
 if (!saved.int || PRE[saved.int]) saved = preObj(saved.int || 'wild');
 applySet(saved);
@@ -1807,6 +2077,7 @@ if (typeof document.addEventListener === 'function') {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       closeChangelog();
+      closeSettingsModal();
       if (guideEl) guideEl.hidden = true;
     }
   });
