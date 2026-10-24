@@ -275,8 +275,8 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
 .cs label{display:flex;align-items:center;gap:8px}
 .cs select{font:inherit;padding:6px 8px;border-radius:8px;background:var(--surface-alt);color:var(--ink);border:1px solid var(--border)}
 .evs{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
-#guide{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:50;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:20px}
-#guide[hidden]{display:none}
+#guide,#changelog{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:50;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:20px}
+#guide[hidden],#changelog[hidden]{display:none !important}
 .gbox{background:var(--surface);color:var(--ink);border:1px solid var(--border-light);border-radius:14px;padding:20px;width:min(100%,700px);font-size:.9rem;line-height:1.5}
 .gbox h2{margin:0 0 8px}
 .gc{border-top:1px solid var(--border);padding:12px 0}
@@ -590,9 +590,9 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
 </div></div>
 
 <!-- Changelog Modal -->
-<div id="changelog" hidden style="position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:50; display:flex; justify-content:center; align-items:flex-start; overflow:auto; padding:20px;">
+<div id="changelog" hidden>
   <div class="gbox" style="max-width: 680px; margin: auto;">
-    <button id="clclose" type="button" style="float:right; border:1px solid var(--border); border-radius:6px; background:var(--surface-alt); color:var(--ink); padding:6px 12px; cursor:pointer;">Close</button>
+    <button id="clclose" type="button" style="float:right; border:1px solid var(--border); border-radius:6px; background:var(--surface-alt); color:var(--ink); padding:6px 12px; cursor:pointer;">✕ Close</button>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
       <span style="font-size:1.4rem;">📜</span>
       <h2 style="margin:0;">Version Changelog</h2>
@@ -647,6 +647,9 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
         <li><b>AI Solo Practice:</b> 4 difficulty levels with chaos adaptability.</li>
         <li><b>Visual Assists:</b> Threat arrows, attacked piece rings, move dots, and board themes.</li>
       </ul>
+    </div>
+    <div style="text-align:center; margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+      <button id="clcloseBottom" type="button" class="cc-btn cc-btn-primary" style="padding:8px 24px; cursor:pointer;">Close Changelog</button>
     </div>
   </div>
 </div>
@@ -1732,8 +1735,19 @@ if (gfilterAll) gfilterAll.addEventListener('click', () => renderGuide('all'));
 if (gfilterNew) gfilterNew.addEventListener('click', () => renderGuide('new'));
 
 const changelogEl = document.getElementById('changelog');
-function openChangelog() { if (changelogEl) { changelogEl.hidden = false; changelogEl.scrollTop = 0; } }
-function closeChangelog() { if (changelogEl) changelogEl.hidden = true; }
+function openChangelog() {
+  if (changelogEl) {
+    changelogEl.hidden = false;
+    changelogEl.style.display = 'flex';
+    changelogEl.scrollTop = 0;
+  }
+}
+function closeChangelog() {
+  if (changelogEl) {
+    changelogEl.hidden = true;
+    changelogEl.style.display = 'none';
+  }
+}
 
 const navChangelogBtn = document.getElementById('navChangelogBtn');
 if (navChangelogBtn) navChangelogBtn.addEventListener('click', openChangelog);
@@ -1744,9 +1758,21 @@ if (btnWhatsNew) btnWhatsNew.addEventListener('click', openChangelog);
 const clclose = document.getElementById('clclose');
 if (clclose) clclose.addEventListener('click', closeChangelog);
 
+const clcloseBottom = document.getElementById('clcloseBottom');
+if (clcloseBottom) clcloseBottom.addEventListener('click', closeChangelog);
+
 if (changelogEl) {
   changelogEl.addEventListener('click', e => {
-    if (e.target === changelogEl) closeChangelog();
+    if (e.target === changelogEl || e.target.id === 'clclose' || e.target.id === 'clcloseBottom') closeChangelog();
+  });
+}
+
+if (typeof document.addEventListener === 'function') {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeChangelog();
+      if (guideEl) guideEl.hidden = true;
+    }
   });
 }
 
