@@ -251,6 +251,25 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
 .fxm.hl i{inset:0;border-radius:0;box-shadow:inset 0 0 0 3px var(--ec),inset 0 0 18px var(--ec);animation:hlp .7s ease-in-out 5}
 @keyframes hlp{50%{opacity:.2}}
 
+/* Danger Zones, Magma, Phantom, Bounty, Overcharged & Draft */
+.sq.danger-zone{animation:dangerPulse 1.1s ease-in-out infinite;box-shadow:inset 0 0 0 3px #ef4444,inset 0 0 16px rgba(239,68,68,.6)}
+.sq.danger-zone::after{content:"⚠️";position:absolute;top:2px;right:2px;font-size:12px;z-index:6;filter:drop-shadow(0 0 3px #000)}
+@keyframes dangerPulse{0%,100%{outline:3px solid rgba(239,68,68,.95);outline-offset:-3px}50%{outline:3px solid rgba(245,158,11,.7);outline-offset:-3px}}
+.fxm.magma i{inset:0;border-radius:0;background:linear-gradient(135deg,rgba(220,38,38,.85),rgba(245,158,11,.7));box-shadow:inset 0 0 0 2px #f97316,inset 0 0 16px #dc2626;animation:magmaPulse 1.4s ease-in-out infinite}
+@keyframes magmaPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.35)}}
+.fxm.phantom i{inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(6,182,212,.75),rgba(59,130,246,.25));box-shadow:0 0 14px rgba(6,182,212,.8);animation:spin 3s linear infinite}
+.pw.bounty-marked::after{content:"👑";position:absolute;top:-10px;right:-4px;font-size:16px;filter:drop-shadow(0 0 4px #eab308);animation:bounce 1.2s infinite;z-index:5}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.pw.overcharged .pc{filter:drop-shadow(0 0 10px #eab308) drop-shadow(0 0 4px #fff)}
+.draft-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:55;display:flex;align-items:center;justify-content:center;padding:16px}
+.draft-box{background:var(--surface);border:1px solid var(--border-light);border-radius:16px;padding:22px;max-width:440px;width:100%;text-align:center;box-shadow:0 16px 40px rgba(0,0,0,.6);animation:fade .2s}
+.draft-badge{display:inline-block;padding:4px 10px;border-radius:99px;background:rgba(142,92,240,.18);color:#a855f7;font-size:.75rem;font-weight:700;margin-bottom:8px}
+.draft-cards-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.draft-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:14px 10px;cursor:pointer;transition:all .15s;text-align:center}
+.draft-card:hover{border-color:var(--cc-accent);transform:translateY(-2px);background:var(--surface-hover)}
+.draft-card h4{margin:0 0 6px;font-size:1rem}
+.draft-card p{margin:0;font-size:.78rem;color:var(--muted);line-height:1.4}
+
 /* Modals & Developer tools */
 .cs{display:grid;gap:10px;font-size:.88rem}
 .cs label{display:flex;align-items:center;gap:8px}
@@ -393,6 +412,7 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
           <label>Intensity <select id="int"><option value="mild">Mild</option><option value="wild">Wild</option><option value="mayhem">Mayhem</option><option value="custom">Custom</option></select></label>
           <label>Event every <select id="freq"><option>3</option><option selected>5</option><option>7</option></select> moves</label>
           <label>Events per chaos <select id="burst"><option>1</option><option>2</option><option>3</option></select></label>
+          <label><input id="chaosDraft" type="checkbox"> Chaos Draft (Choose from 2 events when meter hits 0)</label>
           <div class="evs" id="evs"></div>
         </section>
       </div>
@@ -554,6 +574,16 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
   <div id="gcards"></div>
 </div></div>
 
+<!-- Chaos Draft Modal -->
+<div id="draftModal" style="display:none;" class="draft-overlay">
+  <div class="draft-box">
+    <div class="draft-badge">⚡ CHAOS DRAFT</div>
+    <h3 style="margin:4px 0 10px; font-size:1.2rem;">Choose Your Event</h3>
+    <p style="font-size:0.85rem; color:var(--muted); margin:0 0 16px;">The chaos meter hit 0! Select which event activates on this ply:</p>
+    <div class="draft-cards-row" id="draftCards"></div>
+  </div>
+</div>
+
 <!-- Shared modularized engines -->
 <script src="src/online/config.js"></script>
 <script src="src/online/auth.js"></script>
@@ -578,7 +608,8 @@ const {
   MV, mat, pieceList, swapPairs, rushT, rushApply, reshape,
   emptyRows, tideRows, meteorOpts, defOpts, fixCast, grav,
   coronate, tradeOpts, stamp, mirrorRows, nbOf, riftOf,
-  validate, EVENTS, chaosPick, ageEffects, evReset, chaosTick, PRE, preObj
+  validate, EVENTS, chaosPick, ageEffects, evReset, chaosTick, PRE, preObj,
+  isOverdrive, computeDangerZones, activeEmptySqs
 } = ChaosModule;
 
 let NR = 8;
@@ -701,8 +732,15 @@ function paint() {
     const t = targets.find(m => m.tr === r && m.tf === f);
     if (t && DISP.dots) c += (G.pos.b[r][f] || t.ep) ? ' mv cp' : ' mv';
     if (th) { if (DISP.heat && th.att[r][f]) c += ' heat'; if (DISP.hang && th.thr[r][f]) c += th.thr[r][f] === 2 ? ' hang' : ' thr'; }
+    if (G.chaos && G.chaos.danger && G.chaos.danger.some(d => d[0] === r && d[1] === f)) c += ' danger-zone';
     sqEls[r][f].className = c;
-    if (pcEls[r][f]) pcEls[r][f].classList.toggle('lift', !!isSel);
+    if (pcEls[r][f]) {
+      pcEls[r][f].classList.toggle('lift', !!isSel);
+      const isBounty = G.pos && G.pos.bounty && G.pos.bounty.sq[0] === r && G.pos.bounty.sq[1] === f;
+      pcEls[r][f].classList.toggle('bounty-marked', !!isBounty);
+      const isOver = G.pos && G.pos.overcharged && ((G.pos.overcharged.w && G.pos.overcharged.w[0] === r && G.pos.overcharged.w[1] === f) || (G.pos.overcharged.b && G.pos.overcharged.b[0] === r && G.pos.overcharged.b[1] === f));
+      pcEls[r][f].classList.toggle('overcharged', !!isOver);
+    }
   }
 }
 
@@ -780,6 +818,34 @@ function animate(m) {
   setTimeout(() => { el.style.zIndex = ''; el.classList.remove('land', 'pop'); }, 700);
 }
 
+function showDraftModal(onChosen) {
+  const modal = document.getElementById('draftModal');
+  const cards = document.getElementById('draftCards');
+  if (!modal || !cards) { onChosen(null); return; }
+  const ev1 = chaosPick(G);
+  const remaining = EVENTS.filter(e => e.on && e.canFire(G.pos) && (!ev1 || e.id !== ev1.id));
+  const ev2 = remaining.length ? remaining[Math.floor(mulberry(G.chaos.seed + G.chaos.n * 73)() * remaining.length)] : ev1;
+  if (!ev1) { onChosen(null); return; }
+
+  cards.innerHTML = [ev1, ev2].map((ev, i) => `
+    <div class="draft-card" data-idx="${i}">
+      <h4 style="color:${ev.color};">${ev.name}</h4>
+      <p>${ev.desc}</p>
+      <button type="button" class="cc-btn cc-btn-primary" style="margin-top:10px; width:100%; padding:6px 8px; font-size:.8rem;">Select</button>
+    </div>
+  `).join('');
+  modal.style.display = 'flex';
+
+  const clickHandler = e => {
+    const card = e.target.closest('.draft-card');
+    if (!card) return;
+    modal.style.display = 'none';
+    modal.removeEventListener('click', clickHandler);
+    onChosen(card.dataset.idx === '1' ? ev2 : ev1);
+  };
+  modal.addEventListener('click', clickHandler);
+}
+
 function commit(m) {
   if (mode === 'online' && Multiplayer && Multiplayer.getMatchData()) {
     busy = true;
@@ -805,7 +871,28 @@ function commit(m) {
   busy = true; setTimeout(() => { busy = false; }, 320);
   if (r.ch) fxHold = true;
   paint(); info();
-  if (r.ch) { const g = G; setTimeout(() => { fxHold = false; if (G === g) fireFx(r.ch); }, 380); }
+  if (r.ch) {
+    if (chaosDraftOn && mode !== 'online' && (!vsAI() || G.pos.turn === human)) {
+      showDraftModal(chosenEv => {
+        fxHold = false;
+        if (chosenEv && chosenEv.id !== r.ch.ev.id) {
+          const rand = mulberry(G.chaos.seed + G.chaos.n * 977);
+          const out = chosenEv.apply(G.pos, rand);
+          const err = validate(G.pos, out.p);
+          if (!err) {
+            G.pos = out.p;
+            fireFx({ ev: chosenEv, ...out, changed: true });
+          } else {
+            fireFx(r.ch);
+          }
+        } else {
+          fireFx(r.ch);
+        }
+      });
+    } else {
+      const g = G; setTimeout(() => { fxHold = false; if (G === g) fireFx(r.ch); }, 380);
+    }
+  }
   const dl = r.ch ? 1500 + 1400 * (r.ch.more ? r.ch.more.length : 0) : 350; setTimeout(maybeAI, dl);
   if (!vsAI() && DISP.aflip) setTimeout(() => { if (flipped !== (G.pos.turn === 'b')) flip(); }, dl + 100);
 }
@@ -883,12 +970,21 @@ const fxEl = document.getElementById('fx');
 
 function paintFx() {
   overlay();
-  const p = G.pos, sig = JSON.stringify([p.portal && [p.portal.a, p.portal.b], p.frozen && p.frozen.sq, flipped, UR]);
+  const p = G.pos, sig = JSON.stringify([
+    p.portal && [p.portal.a, p.portal.b],
+    p.frozen && p.frozen.sq,
+    p.magma && p.magma.sqs,
+    p.phantom && p.phantom.sq,
+    flipped,
+    UR
+  ]);
   if (sig === fxSig) return; fxSig = sig;
   fxEl.innerHTML = '';
   const add = (cls, r, f) => { const d = document.createElement('div'); d.className = 'fxm ' + cls; d.innerHTML = '<i></i>'; place(d, r, f); fxEl.appendChild(d); };
   if (p.portal) { add('portal', ...p.portal.a); add('portal', ...p.portal.b); }
   if (p.frozen) add('ice', ...p.frozen.sq);
+  if (p.magma && p.magma.sqs) p.magma.sqs.forEach(sq => add('magma', ...sq));
+  if (p.phantom && p.phantom.sq) add('phantom', ...p.phantom.sq);
 }
 
 function applyFog() {
@@ -943,11 +1039,35 @@ function fireFx(res, rest) {
 
 function chaosUI() {
   applyFog();
-  const c = G.chaos, info = document.getElementById('cinfo'), box = document.getElementById('chaos');
-  if (!chaosOn) { info.textContent = 'Classic mode (chaos off)'; document.getElementById('cfill').style.width = '0%'; box.classList.remove('hot'); if (!fxHold) paintFx(); return; }
-  document.getElementById('cfill').style.width = ((c.max - c.meter) / c.max * 100) + '%';
+  const c = G.chaos, info = document.getElementById('cinfo'), box = document.getElementById('chaos'), cfill = document.getElementById('cfill');
+  if (!chaosOn) { info.textContent = 'Classic mode (chaos off)'; if (cfill) cfill.style.width = '0%'; box.classList.remove('hot'); if (!fxHold) paintFx(); return; }
+  if (cfill) {
+    cfill.style.width = ((c.max - c.meter) / c.max * 100) + '%';
+    cfill.style.background = c.overdrive ? 'linear-gradient(90deg, #f97316, #ef4444)' : '';
+  }
   box.classList.toggle('hot', c.meter <= 1);
-  info.textContent = ((c.meter === 1 && c.next) ? 'Next: ' + c.next.name + (CH.burst > 1 ? ' +' + (CH.burst - 1) + ' more' : '') + ' (after the next move)' : 'Chaos in ' + c.meter + (c.meter === 1 ? ' move' : ' moves')) + (G.pos.portal ? ' · Portal ' + G.pos.portal.ttl : '') + (G.pos.frozen ? ' · Frozen ' + G.pos.frozen.ttl : '') + (G.pos.b.length !== 8 ? ' · ' + G.pos.b.length + ' ranks' : '') + (G.pos.fog ? ' · Fog' : '') + (G.pos.dt ? ' · Bonus move owed to ' + (G.pos.dt === 'w' ? 'White' : 'Black') : '') + ((G.scol.length && G.scol[G.scol.length - 1] === G.pos.turn) ? ' · Bonus move!' : '');
+  let text = '';
+  if (c.overdrive) text += '⚡ OVERDRIVE · ';
+  if (c.meter === 1 && c.next) {
+    text += 'Next: ' + c.next.name + (CH.burst > 1 ? ' +' + (CH.burst - 1) + ' more' : '');
+    if (c.danger && c.danger.length) {
+      const dangerNames = c.danger.map(([r, f]) => FILES[f] + (UR - r)).join(', ');
+      text += ' · ⚠️ EVACUATE: ' + dangerNames;
+    }
+  } else {
+    text += 'Chaos in ' + c.meter + (c.meter === 1 ? ' move' : ' moves');
+  }
+  if (G.pos.portal) text += ' · Portal ' + G.pos.portal.ttl;
+  if (G.pos.frozen) text += ' · Frozen ' + G.pos.frozen.ttl;
+  if (G.pos.magma) text += ' · Magma ' + G.pos.magma.ttl;
+  if (G.pos.bounty) text += ' · Bounty 👑';
+  if (G.pos.phantom) text += ' · Phantom';
+  if (G.pos.overcharged) text += ' · Overcharged ⚡';
+  if (G.pos.b.length !== 8) text += ' · ' + G.pos.b.length + ' ranks';
+  if (G.pos.fog) text += ' · Fog of War';
+  if (G.pos.dt) text += ' · Bonus move owed to ' + (G.pos.dt === 'w' ? 'White' : 'Black');
+  if (G.scol.length && G.scol[G.scol.length - 1] === G.pos.turn) text += ' · Bonus move!';
+  info.textContent = text;
   if (!fxHold) paintFx();
 }
 
@@ -1384,10 +1504,13 @@ document.getElementById('stress').addEventListener('click', chaosStress);
 document.getElementById('play10').addEventListener('click', playtest);
 
 // Chaos settings
-const SKEY = 'chaosChessSettings', freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'), burstEl = document.getElementById('burst');
-function saveSet() { try { localStorage.setItem(SKEY, JSON.stringify({ int: intEl.value, on: chaosOn, every: CH.every, burst: CH.burst, off: EVENTS.filter(e => !e.on).map(e => e.id) })); } catch (e) {} }
+const SKEY = 'chaosChessSettings', freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'), burstEl = document.getElementById('burst'), draftEl = document.getElementById('chaosDraft');
+let chaosDraftOn = false;
+function saveSet() { try { localStorage.setItem(SKEY, JSON.stringify({ int: intEl.value, on: chaosOn, every: CH.every, burst: CH.burst, draft: chaosDraftOn, off: EVENTS.filter(e => !e.on).map(e => e.id) })); } catch (e) {} }
 function applySet(s) {
   chaosOn = s.on !== false; CH.every = [3, 5, 7].includes(s.every) ? s.every : 5; CH.start = CH.every + 4; CH.burst = [1, 2, 3].includes(s.burst) ? s.burst : 1;
+  chaosDraftOn = !!s.draft;
+  if (draftEl) draftEl.checked = chaosDraftOn;
   EVENTS.forEach(e => { e.on = !(s.off || []).includes(e.id); });
   if (!EVENTS.some(e => e.on)) EVENTS.forEach(e => { e.on = true; });
   cOnEl.checked = chaosOn; freqEl.value = CH.every; intEl.value = s.int || 'custom'; burstEl.value = CH.burst; evsEl.innerHTML = '';
@@ -1402,6 +1525,7 @@ function applySet(s) {
     l.append(c, ' ' + e.name); evsEl.appendChild(l);
   });
 }
+if (draftEl) draftEl.addEventListener('change', () => { chaosDraftOn = draftEl.checked; saveSet(); });
 cOnEl.addEventListener('change', saveSet);
 burstEl.addEventListener('change', () => { CH.burst = +burstEl.value; intEl.value = 'custom'; saveSet(); chaosUI(); });
 freqEl.addEventListener('change', () => {
@@ -1525,7 +1649,7 @@ function attackersOf(b, r, f, by) {
 }
 
 function threatInfo() {
-  if (fxHold || G.result || !(DISP.threat || DISP.hang || DISP.heat) || status(G, rescue).over) return null;
+  if (fxHold || G.result || (G.pos && G.pos.fog) || !(DISP.threat || DISP.hang || DISP.heat) || status(G, rescue).over) return null;
   const b = G.pos.b, R = b.length, me = vsAI() ? human : G.pos.turn, opp = me === 'w' ? 'b' : 'w', att = [], thr = [], arrows = [];
   for (let r = 0; r < R; r++) { att.push([]); thr.push([]); for (let f = 0; f < 8; f++) { att[r][f] = attacked(b, r, f, opp); thr[r][f] = 0; } }
   for (let r = 0; r < R; r++) for (let f = 0; f < 8; f++) {
@@ -1554,8 +1678,18 @@ function overlay() {
 
 function syncMeter() {
   const c = G.chaos;
-  if (!G.hist.length) { c.meter = c.max = CH.start; } else { c.max = CH.every; c.meter = Math.max(1, Math.min(c.meter, CH.every)); }
+  const od = isOverdrive ? isOverdrive(G.pos) : false;
+  const targetEvery = od ? Math.min(3, CH.every) : CH.every;
+  if (!G.hist.length) {
+    c.meter = c.max = CH.start;
+  } else {
+    c.max = targetEvery;
+    c.meter = Math.max(1, Math.min(c.meter, targetEvery));
+  }
+  c.overdrive = od;
   if (chaosOn && c.meter === 1 && !c.next) c.next = chaosPick(G);
+  if (chaosOn && c.meter === 1 && typeof computeDangerZones === 'function') c.danger = computeDangerZones(G);
+  else c.danger = [];
 }
 
 function drawTests() {

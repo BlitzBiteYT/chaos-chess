@@ -156,7 +156,16 @@
       }
     }
     const z = p.frozen && p.frozen.sq;
-    return z ? out.filter(m => !(m.tr === z[0] && m.tf === z[1]) && !(m.castle && m.r === z[0] && z[1] === (m.castle === 'k' ? 5 : 3))) : out;
+    let filtered = z ? out.filter(m => !(m.tr === z[0] && m.tf === z[1]) && !(m.castle && m.r === z[0] && z[1] === (m.castle === 'k' ? 5 : 3))) : out;
+    const mg = p.magma && p.magma.sqs;
+    if (mg && mg.length) {
+      filtered = filtered.filter(m => !mg.some(s => m.tr === s[0] && m.tf === s[1]));
+    }
+    const ph = p.phantom && p.phantom.sq;
+    if (ph) {
+      filtered = filtered.filter(m => !(m.tr === ph[0] && m.tf === ph[1]));
+    }
+    return filtered;
   }
 
   function teleDest(p, m) {
@@ -219,7 +228,11 @@
       portal: p.portal,
       frozen: p.frozen,
       fog: p.fog,
-      dt
+      dt,
+      magma: p.magma,
+      phantom: p.phantom,
+      bounty: p.bounty,
+      overcharged: p.overcharged
     };
   }
 

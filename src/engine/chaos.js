@@ -24,7 +24,9 @@
     isW,
     inCheck,
     legal,
-    posKey
+    posKey,
+    attacked,
+    pseudo
   } = ChessEngine;
 
   function mulberry(a) {
@@ -49,6 +51,26 @@
       }
     }
     return o;
+  };
+
+  const activeEmptySqs = p => {
+    const o = [];
+    const seen = new Set();
+    const addMoves = pos => {
+      const ms = legal(pos);
+      for (const m of ms) {
+        if (!pos.b[m.tr][m.tf]) {
+          const key = m.tr + ',' + m.tf;
+          if (!seen.has(key)) {
+            seen.add(key);
+            o.push([m.tr, m.tf]);
+          }
+        }
+      }
+    };
+    addMoves(p);
+    addMoves({ ...p, turn: p.turn === 'w' ? 'b' : 'w' });
+    return o.length ? o : emptySqs(p, 0, p.b.length - 1);
   };
 
   const pickOut = (a, rand) => a.splice(Math.floor(rand() * a.length), 1)[0];
@@ -309,10 +331,10 @@
       }
     },
     {
-      id: 'frozen', name: 'Frozen Square', color: '#4aa8e8', sound: 'ice', desc: 'One empty square is frozen: nobody can move onto it.',
-      canFire: p => !p.frozen && emptySqs(p, 0, 7).length > 0,
+      id: 'frozen', name: 'Frozen Square', color: '#4aa8e8', sound: 'ice', desc: 'One tactical empty square is frozen: nobody can move onto it.',
+      canFire: p => !p.frozen && activeEmptySqs(p).length > 0,
       apply(p, rand) {
-        const q = clonePos(p), e = emptySqs(q, 0, 7);
+        const q = clonePos(p), e = activeEmptySqs(q);
         q.frozen = { sq: pickOut(e, rand), ttl: 4 };
         return { p: q };
       }
@@ -336,11 +358,11 @@
       apply: p => rushApply(p)
     },
     {
-      id: 'fog', name: 'Fog of War', color: '#7a869e', sound: 'fog', desc: 'Each side plays one move unable to see the enemy pieces.',
+      id: 'fog', name: 'Fog of War', color: '#7a869e', sound: 'fog', desc: 'Enemy pieces and threat analysis are hidden in the fog until the next event trigger.',
       canFire: p => !p.fog,
       apply(p) {
         const q = clonePos(p);
-        q.fog = { ttl: 2 };
+        q.fog = { untilNextTrigger: true, ttl: 99 };
         return { p: q };
       }
     },
@@ -520,6 +542,125 @@
         fixCast(q);
         return { p: q, slides };
       }
+    },
+    {
+      id: 'blackhole', name: 'Black Hole', color: '#7c3aed', sound: 'quake', desc: 'A cosmic singularity pulls pieces 1 square inward toward the center.',
+      canFire: p => {
+        const nr = p.b.length;
+        for (let r = 0; r < nr; r++) {
+          for (let f = 0; f < 8; f++) {
+            const c = p.b[r][f];
+            if (!c || c.toLowerCase() === 'k') continue;
+            const dr = r < 3 ? 1 : (r > 4 ? -1 : 0);
+            const df = f < 3 ? 1 : (f > 4 ? -1 : 0);
+            if ((dr || df) && inb(r + dr, f + df, nr) && !p.b[r + dr][f + df]) {
+              if (c.toLowerCase() === 'p' && (r + dr === 0 || r + dr === nr - 1)) continue;
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      apply(p) {
+        const q = clonePos(p), nr = q.b.length, slides = [];
+        q.ep = null;
+        const rOrder = [...Array(nr).keys()].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
+        const fOrder = [0, 1, 2, 3, 4, 5, 6, 7].sort((a, b) => Math.abs(a - 3.5) - Math.abs(b - 3.5));
+        for (const r of rOrder) {
+          for (const f of fOrder) {
+            const c = q.b[r][f];
+            if (!c || c.toLowerCase() === 'k') continue;
+            const dr = r < 3 ? 1 : (r > 4 ? -1 : 0);
+            const df = f < 3 ? 1 : (f > 4 ? -1 : 0);
+            if (!dr && !df) continue;
+            const tr = r + dr, tf = f + df;
+            if (inb(tr, tf, nr) && !q.b[tr][tf]) {
+              if (c.toLowerCase() === 'p' && (tr === 0 || tr === nr - 1)) continue;
+              q.b[tr][tf] = c;
+              q.b[r][f] = null;
+              slides.push({ from: [r, f], to: [tr, tf] });
+            }
+          }
+        }
+        fixCast(q);
+        return { p: q, slides };
+      }
+    },
+    {
+      id: 'bounty', name: "King's Ransom", color: '#f59e0b', sound: 'portal', desc: 'A bounty is placed on a minor piece. Its capturer claims an immediate bonus pawn!',
+      canFire: p => pieceList(p, c => 'nbr'.includes(c.toLowerCase())).length > 0,
+      apply(p, rand) {
+        const q = clonePos(p), opts = pieceList(q, c => 'nbr'.includes(c.toLowerCase()));
+        const [r, f] = opts[Math.floor(rand() * opts.length)];
+        q.bounty = { sq: [r, f], piece: q.b[r][f], ttl: 6 };
+        return { p: q, pops: [[r, f]] };
+      }
+    },
+    {
+      id: 'phantom', name: 'Phantom Split', color: '#06b6d4', sound: 'warp', desc: 'A knight or bishop projects an illusory decoy onto an adjacent square.',
+      canFire: p => pieceList(p, c => 'nb'.includes(c.toLowerCase())).length > 0 && emptySqs(p, 1, 6).length > 0,
+      apply(p, rand) {
+        const q = clonePos(p), opts = pieceList(q, c => 'nb'.includes(c.toLowerCase()));
+        const [r, f] = opts[Math.floor(rand() * opts.length)];
+        const adj = [];
+        for (const dr of [-1, 0, 1]) {
+          for (const df of [-1, 0, 1]) {
+            if (!dr && !df) continue;
+            if (inb(r + dr, f + df, q.b.length) && !q.b[r + dr][f + df]) adj.push([r + dr, f + df]);
+          }
+        }
+        const target = adj.length ? adj[Math.floor(rand() * adj.length)] : pickOut(emptySqs(q, 1, 6), rand);
+        q.phantom = { sq: target, source: [r, f], ttl: 4 };
+        return { p: q, pops: [target] };
+      }
+    },
+    {
+      id: 'overcharge', name: 'Overcharge', color: '#eab308', sound: 'zap', desc: 'One piece per side surges with electric energy, supercharging its power.',
+      canFire: p => nbOf(p, true).length > 0 && nbOf(p, false).length > 0,
+      apply(p, rand) {
+        const q = clonePos(p), wNb = nbOf(q, true), bNb = nbOf(q, false);
+        const wSq = wNb[Math.floor(rand() * wNb.length)];
+        const bSq = bNb[Math.floor(rand() * bNb.length)];
+        q.overcharged = { w: wSq, b: bSq, ttl: 4 };
+        return { p: q, pops: [wSq, bSq] };
+      }
+    },
+    {
+      id: 'necromancy', name: 'Necromancy', color: '#10b981', sound: 'portal', desc: 'A fallen piece rises from the dead onto an empty square on its back rank.',
+      canFire: p => {
+        const nr = p.b.length;
+        const wEmpty = [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[nr - 1][f]);
+        const bEmpty = [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[0][f]);
+        return wEmpty && bEmpty;
+      },
+      apply(p, rand) {
+        const q = clonePos(p), nr = q.b.length, pops = [];
+        q.ep = null;
+        for (const w of [true, false]) {
+          const row = w ? nr - 1 : 0;
+          const openCols = [];
+          for (let f = 0; f < 8; f++) if (!q.b[row][f]) openCols.push(f);
+          if (openCols.length) {
+            const f = openCols[Math.floor(rand() * openCols.length)];
+            const resurrected = rand() < .5 ? 'n' : 'b';
+            q.b[row][f] = w ? resurrected.toUpperCase() : resurrected;
+            pops.push([row, f]);
+          }
+        }
+        fixCast(q);
+        return { p: q, pops };
+      }
+    },
+    {
+      id: 'magma', name: 'Magma Floor', color: '#dc2626', sound: 'quake', desc: 'Two tactical squares turn into boiling lava for 3 moves.',
+      canFire: p => !p.magma && activeEmptySqs(p).length >= 2,
+      apply(p, rand) {
+        const q = clonePos(p), e = activeEmptySqs(q).slice();
+        const sq1 = pickOut(e, rand);
+        const sq2 = pickOut(e, rand);
+        q.magma = { sqs: [sq1, sq2], ttl: 4 };
+        return { p: q, pops: [sq1, sq2] };
+      }
     }
   ];
 
@@ -532,11 +673,56 @@
     return ok.length ? ok[Math.floor(mulberry(g.chaos.seed + g.chaos.n * 131)() * ok.length)] : null;
   }
 
+  function isOverdrive(pos) {
+    if (!pos || !pos.b) return false;
+    let nonKingPawns = 0;
+    for (const row of pos.b) {
+      for (const c of row) {
+        if (c && !'kp'.includes(c.toLowerCase())) nonKingPawns++;
+      }
+    }
+    return nonKingPawns <= 4;
+  }
+
+  function computeDangerZones(g) {
+    if (!g || !g.chaos || g.chaos.meter !== 1 || !g.chaos.next) return [];
+    const ev = g.chaos.next;
+    const p = g.pos;
+    const rand = mulberry(g.chaos.seed + (g.chaos.n + 1) * 977);
+
+    if (ev.id === 'meteor') {
+      const o = meteorOpts(p);
+      if (o.length) return o[Math.floor(rand() * o.length)];
+    } else if (ev.id === 'zap') {
+      const zones = [];
+      for (const w of [true, false]) {
+        const L = pieceList(p, c => c === (w ? 'P' : 'p'));
+        if (L.length) zones.push(L[Math.floor(rand() * L.length)]);
+      }
+      return zones;
+    } else if (ev.id === 'magma') {
+      const e = activeEmptySqs(p).slice();
+      if (e.length >= 2) {
+        const s1 = pickOut(e, rand);
+        const s2 = pickOut(e, rand);
+        return [s1, s2];
+      }
+    } else if (ev.id === 'frozen') {
+      const e = activeEmptySqs(p);
+      if (e.length) return [e[Math.floor(rand() * e.length)]];
+    }
+    return [];
+  }
+
   function ageEffects(pos) {
-    for (const k of ['portal', 'frozen', 'fog']) {
+    for (const k of ['portal', 'frozen', 'magma', 'phantom', 'bounty', 'overcharged']) {
       if (!pos[k]) continue;
       const t = pos[k].ttl - 1;
       pos[k] = t > 0 ? { ...pos[k], ttl: t } : null;
+    }
+    if (pos.fog && !pos.fog.untilNextTrigger) {
+      const t = pos.fog.ttl - 1;
+      pos.fog = t > 0 ? { ...pos.fog, ttl: t } : null;
     }
   }
 
@@ -553,11 +739,24 @@
     ageEffects(G.pos);
     if (!chaosOn) return null;
     c.meter--;
-    if (c.meter === 1) c.next = chaosPick(G);
+    if (c.meter === 1) {
+      c.next = chaosPick(G);
+      c.danger = computeDangerZones(G);
+    } else if (c.meter !== 1) {
+      c.danger = [];
+    }
     if (c.meter > 0) return null;
     if (!legal(G.pos).length) return null;
-    c.meter = CH.every;
-    c.max = CH.every;
+
+    if (G.pos.fog && G.pos.fog.untilNextTrigger) {
+      G.pos.fog = null;
+    }
+
+    const od = isOverdrive(G.pos);
+    const targetInterval = od ? Math.min(3, CH.every) : CH.every;
+    c.meter = targetInterval;
+    c.max = targetInterval;
+    c.overdrive = od;
     const list = [];
     const log = typeof clog === 'function' ? clog : () => {};
 
@@ -599,8 +798,8 @@
   }
 
   const PRE = {
-    mild: { every: 7, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'fog', 'mutate'] },
-    wild: { every: 5, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'rush', 'fog', 'dtime', 'zap', 'mutate', 'mirror', 'reinforce', 'trade', 'coronate'] },
+    mild: { every: 7, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'fog', 'mutate', 'bounty', 'phantom'] },
+    wild: { every: 5, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'rush', 'fog', 'dtime', 'zap', 'mutate', 'mirror', 'reinforce', 'trade', 'coronate', 'blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'] },
     mayhem: { every: 3, burst: 2, ev: EVENTS.map(e => e.id) }
   };
 
@@ -617,6 +816,7 @@
     CH,
     clonePos,
     emptySqs,
+    activeEmptySqs,
     pickOut,
     quakeCands,
     MV,
@@ -644,6 +844,8 @@
     ageEffects,
     evReset,
     chaosTick,
+    isOverdrive,
+    computeDangerZones,
     PRE,
     preObj
   };
