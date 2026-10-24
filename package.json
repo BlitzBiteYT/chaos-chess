@@ -1,0 +1,33 @@
+{
+  "name": "chaos-chess",
+  "version": "1.0.0",
+  "description": "Chaos Chess with staged online multiplayer hosted on Netlify",
+  "main": "src/engine/chess.js",
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "test:perft": "node tests/chess.test.js",
+    "test:chaos": "node tests/chaos.test.js",
+    "test:schema": "node tests/schema.test.js",
+    "test:session": "node tests/session-function.test.js",
+    "test:auth": "node tests/auth-module.test.js",
+    "test:queue": "node tests/queue-concurrency.test.js",
+    "test:match": "node tests/match-state-function.test.js",
+    "test:sync": "node tests/multiplayer-sync.test.js",
+    "test:move": "node tests/match-move.test.js",
+    "test:chaossync": "node tests/chaos-sync.test.js",
+    "test:endings": "node tests/game-endings.test.js",
+    "test:reconnection": "node tests/reconnection.test.js",
+    "test:security": "node tests/security-concurrency.test.js"
+  },
+  "keywords": [
+    "chess",
+    "chaos-chess",
+    "multiplayer",
+    "supabase",
+    "netlify"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  }
+}
