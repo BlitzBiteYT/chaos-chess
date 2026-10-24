@@ -420,9 +420,10 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
         <div class="box-header">⚡ Chaos Settings</div>
         <section class="cs">
           <label><input id="chaosOn" type="checkbox" checked> Chaos mode (uncheck for Classic)</label>
-          <label>Intensity <select id="int"><option value="mild">Mild</option><option value="wild">Wild</option><option value="mayhem">Mayhem</option><option value="custom">Custom</option></select></label>
+          <label>Intensity <select id="int"><option value="mild">Mild (1x)</option><option value="wild">Wild (2x)</option><option value="mayhem">Mayhem (3x)</option><option value="custom">Custom</option></select></label>
           <label>Event every <select id="freq"><option>3</option><option selected>5</option><option>7</option></select> moves</label>
           <label>Events per chaos <select id="burst"><option>1</option><option>2</option><option>3</option></select></label>
+          <label>Event multiplier <select id="mult"><option value="1">1x (Standard)</option><option value="2">2x (Double Impact)</option><option value="3">3x (Extreme Mayhem)</option></select></label>
           <label><input id="chaosDraft" type="checkbox"> Chaos Draft (Choose from 2 events when meter hits 0)</label>
           <div class="evs" id="evs"></div>
         </section>
@@ -599,11 +600,35 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
     </div>
     <p style="color:var(--muted); font-size:0.85rem; margin:2px 0 16px;">Complete update history and new mechanics in Chaos Chess.</p>
 
-    <!-- v1.2.0 -->
+    <!-- v1.3.0 -->
     <div class="gc" style="border-top:none; padding-top:0;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#f59e0b; margin:0;">v1.3.0 · Event Multipliers &amp; Mayhem Presets</h3>
+        <span style="font-size:0.75rem; background:rgba(245,158,11,.2); color:#fbbf24; padding:2px 8px; border-radius:99px; font-weight:700;">LATEST</span>
+      </div>
+      <ul style="margin:8px 0; padding-left:18px; font-size:0.86rem; line-height:1.6;">
+        <li><b>3-Tier Chaos Intensity Presets:</b>
+          <br>• <b>Mild (1x):</b> Strategic chaos (every 7 moves, 1x multiplier).
+          <br>• <b>Wild (2x):</b> Balanced mayhem (every 5 moves, 2x multiplier).
+          <br>• <b>Mayhem (3x):</b> Extreme apocalyptic chaos (every 3 moves, 2 bursts, 3x multiplier).
+        </li>
+        <li><b>Multiplied Event Scaling:</b>
+          <br>• <b>Frozen Square:</b> Freezes 1 square in 1x, 2 in 2x, 3 in 3x.
+          <br>• <b>Lightning:</b> Zaps 1 pawn/side in 1x, 2 pawns/side in 2x, 3 pawns/side in 3x.
+          <br>• <b>Reinforcements:</b> Spawns 1 pawn/side in 1x, 2 pawns/side in 2x, 3 pawns/side in 3x.
+          <br>• <b>Earthquake:</b> Shifts up to 3 pawns in 1x, 5 pawns in 2x, 7 pawns in 3x.
+          <br>• <b>Magma Floor:</b> Boils 2 squares in 1x, 3 in 2x, 4 in 3x.
+          <br>• <b>Meteor:</b> Destroys 1 zone in 1x, 2 zones in 2x, 3 zones in 3x.
+        </li>
+        <li><b>Smooth Animation &amp; DOM Reconciliation:</b> Authoritative board sync after animations completely eliminates piece displacement bugs.</li>
+        <li><b>Dynamic Bounty Tracking:</b> King's ransom crown properly follows the bounty piece as it moves across the board.</li>
+      </ul>
+    </div>
+
+    <!-- v1.2.0 -->
+    <div class="gc">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
         <h3 style="color:#a855f7; margin:0;">v1.2.0 · Strategic Overhaul &amp; 6 New Chaos Events</h3>
-        <span style="font-size:0.75rem; background:rgba(168,85,247,.2); color:#c084fc; padding:2px 8px; border-radius:99px; font-weight:700;">LATEST</span>
       </div>
       <ul style="margin:8px 0; padding-left:18px; font-size:0.86rem; line-height:1.6;">
         <li><b>6 Brand New Events:</b>
@@ -1052,7 +1077,7 @@ function paintFx() {
   overlay();
   const p = G.pos, sig = JSON.stringify([
     p.portal && [p.portal.a, p.portal.b],
-    p.frozen && p.frozen.sq,
+    p.frozen && (p.frozen.sqs || p.frozen.sq),
     p.magma && p.magma.sqs,
     p.phantom && p.phantom.sq,
     flipped,
@@ -1062,7 +1087,10 @@ function paintFx() {
   fxEl.innerHTML = '';
   const add = (cls, r, f) => { const d = document.createElement('div'); d.className = 'fxm ' + cls; d.innerHTML = '<i></i>'; place(d, r, f); fxEl.appendChild(d); };
   if (p.portal) { add('portal', ...p.portal.a); add('portal', ...p.portal.b); }
-  if (p.frozen) add('ice', ...p.frozen.sq);
+  if (p.frozen) {
+    const sqs = p.frozen.sqs || (p.frozen.sq ? [p.frozen.sq] : []);
+    sqs.forEach(sq => add('ice', ...sq));
+  }
   if (p.magma && p.magma.sqs) p.magma.sqs.forEach(sq => add('magma', ...sq));
   if (p.phantom && p.phantom.sq) add('phantom', ...p.phantom.sq);
 }
@@ -1114,7 +1142,11 @@ function fireFx(res, rest) {
     else if (res.shift && res.shift.d > 0) for (let f = 0; f < 8; f++) sq.push([res.shift.k, f]);
     sq.forEach(([r, f]) => { const d = document.createElement('div'); d.className = 'fxm hl'; d.style.setProperty('--ec', res.ev.color); d.innerHTML = '<i></i>'; place(d, r, f); fxEl.appendChild(d); setTimeout(() => d.remove(), 3600); });
   }
-  if (!rest.length) { chaosUI(); if (res.multi) { const g = G; setTimeout(() => { if (G === g) render(); }, 1000); } }
+  if (!rest.length) {
+    chaosUI();
+    const g = G;
+    setTimeout(() => { if (G === g) render(); }, 850);
+  }
 }
 
 function chaosUI() {
@@ -1584,16 +1616,19 @@ document.getElementById('stress').addEventListener('click', chaosStress);
 document.getElementById('play10').addEventListener('click', playtest);
 
 // Chaos settings
-const SKEY = 'chaosChessSettings', freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'), burstEl = document.getElementById('burst'), draftEl = document.getElementById('chaosDraft');
+const SKEY = 'chaosChessSettings', freqEl = document.getElementById('freq'), evsEl = document.getElementById('evs'), cOnEl = document.getElementById('chaosOn'), burstEl = document.getElementById('burst'), multEl = document.getElementById('mult'), draftEl = document.getElementById('chaosDraft');
 let chaosDraftOn = false;
-function saveSet() { try { localStorage.setItem(SKEY, JSON.stringify({ int: intEl.value, on: chaosOn, every: CH.every, burst: CH.burst, draft: chaosDraftOn, off: EVENTS.filter(e => !e.on).map(e => e.id) })); } catch (e) {} }
+function saveSet() { try { localStorage.setItem(SKEY, JSON.stringify({ int: intEl.value, on: chaosOn, every: CH.every, burst: CH.burst, mult: CH.mult, draft: chaosDraftOn, off: EVENTS.filter(e => !e.on).map(e => e.id) })); } catch (e) {} }
 function applySet(s) {
   chaosOn = s.on !== false; CH.every = [3, 5, 7].includes(s.every) ? s.every : 5; CH.start = CH.every + 4; CH.burst = [1, 2, 3].includes(s.burst) ? s.burst : 1;
+  CH.mult = [1, 2, 3].includes(s.mult) ? s.mult : (PRE[s.int] ? PRE[s.int].mult : 1);
   chaosDraftOn = !!s.draft;
   if (draftEl) draftEl.checked = chaosDraftOn;
   EVENTS.forEach(e => { e.on = !(s.off || []).includes(e.id); });
   if (!EVENTS.some(e => e.on)) EVENTS.forEach(e => { e.on = true; });
-  cOnEl.checked = chaosOn; freqEl.value = CH.every; intEl.value = s.int || 'custom'; burstEl.value = CH.burst; evsEl.innerHTML = '';
+  cOnEl.checked = chaosOn; freqEl.value = CH.every; intEl.value = s.int || 'custom'; burstEl.value = CH.burst;
+  if (multEl) multEl.value = CH.mult;
+  evsEl.innerHTML = '';
   EVENTS.forEach(e => {
     const l = document.createElement('label'), c = document.createElement('input'); c.type = 'checkbox'; c.checked = e.on;
     c.addEventListener('change', () => {
@@ -1608,6 +1643,7 @@ function applySet(s) {
 if (draftEl) draftEl.addEventListener('change', () => { chaosDraftOn = draftEl.checked; saveSet(); });
 cOnEl.addEventListener('change', saveSet);
 burstEl.addEventListener('change', () => { CH.burst = +burstEl.value; intEl.value = 'custom'; saveSet(); chaosUI(); });
+if (multEl) multEl.addEventListener('change', () => { CH.mult = +multEl.value; intEl.value = 'custom'; saveSet(); chaosUI(); });
 freqEl.addEventListener('change', () => {
   CH.every = +freqEl.value; CH.start = CH.every + 4;
   syncMeter();

@@ -155,8 +155,11 @@
         }
       }
     }
-    const z = p.frozen && p.frozen.sq;
-    let filtered = z ? out.filter(m => !(m.tr === z[0] && m.tf === z[1]) && !(m.castle && m.r === z[0] && z[1] === (m.castle === 'k' ? 5 : 3))) : out;
+    const fzs = p.frozen && (p.frozen.sqs || (p.frozen.sq ? [p.frozen.sq] : []));
+    let filtered = out;
+    if (fzs && fzs.length) {
+      filtered = filtered.filter(m => !fzs.some(s => m.tr === s[0] && m.tf === s[1]) && !(m.castle && fzs.some(s => m.r === s[0] && s[1] === (m.castle === 'k' ? 5 : 3))));
+    }
     const mg = p.magma && p.magma.sqs;
     if (mg && mg.length) {
       filtered = filtered.filter(m => !mg.some(s => m.tr === s[0] && m.tf === s[1]));
@@ -218,6 +221,14 @@
       const ok = findKing(b, !w);
       if (!(ok && attacked(b, ok[0], ok[1], me))) turn = me;
     }
+    let bounty = p.bounty;
+    if (bounty && bounty.sq) {
+      if (bounty.sq[0] === m.r && bounty.sq[1] === m.f) {
+        bounty = { ...bounty, sq: [m.tr, m.tf] };
+      } else if (bounty.sq[0] === m.tr && bounty.sq[1] === m.tf) {
+        bounty = null;
+      }
+    }
     return {
       b,
       turn,
@@ -231,7 +242,7 @@
       dt,
       magma: p.magma,
       phantom: p.phantom,
-      bounty: p.bounty,
+      bounty,
       overcharged: p.overcharged
     };
   }

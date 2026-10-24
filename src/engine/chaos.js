@@ -39,7 +39,7 @@
     };
   }
 
-  const CH = { start: 9, every: 5, burst: 1 };
+  const CH = { start: 9, every: 5, burst: 1, mult: 1 };
   const clonePos = p => ({ ...p, b: p.b.map(r => r.slice()) });
 
   const emptySqs = (p, r0, r1) => {
@@ -303,12 +303,13 @@
 
   const EVENTS = [
     {
-      id: 'quake', name: 'Earthquake', color: '#e0407a', sound: 'quake', desc: 'Up to 3 pawns slide sideways.',
+      id: 'quake', name: 'Earthquake', color: '#e0407a', sound: 'quake', desc: 'Pawns slide sideways in the tremors.',
       canFire: p => quakeCands(p).length > 0,
       apply(p, rand) {
         const q = clonePos(p), slides = [], skip = new Set();
         q.ep = null;
-        for (let i = 0; i < 3; i++) {
+        const maxSlides = (CH.mult || 1) * 2 + 1;
+        for (let i = 0; i < maxSlides; i++) {
           const c = quakeCands(q, skip);
           if (!c.length) break;
           const [r, f, tf] = c[Math.floor(rand() * c.length)];
@@ -331,12 +332,17 @@
       }
     },
     {
-      id: 'frozen', name: 'Frozen Square', color: '#4aa8e8', sound: 'ice', desc: 'One tactical empty square is frozen: nobody can move onto it.',
+      id: 'frozen', name: 'Frozen Square', color: '#4aa8e8', sound: 'ice', desc: 'Tactical squares are frozen in ice: nobody can move onto them.',
       canFire: p => !p.frozen && activeEmptySqs(p).length > 0,
       apply(p, rand) {
-        const q = clonePos(p), e = activeEmptySqs(q);
-        q.frozen = { sq: pickOut(e, rand), ttl: 4 };
-        return { p: q };
+        const q = clonePos(p), e = activeEmptySqs(q).slice();
+        const count = Math.min(CH.mult || 1, e.length);
+        const sqs = [];
+        for (let i = 0; i < count; i++) {
+          sqs.push(pickOut(e, rand));
+        }
+        q.frozen = { sqs, sq: sqs[0], ttl: 4 };
+        return { p: q, pops: sqs };
       }
     },
     {
@@ -376,15 +382,20 @@
       }
     },
     {
-      id: 'zap', name: 'Lightning', color: '#f2c230', sound: 'zap', desc: 'One pawn from each side is struck down.',
+      id: 'zap', name: 'Lightning', color: '#f2c230', sound: 'zap', desc: 'Pawns are struck down by lightning.',
       canFire: p => [true, false].every(w => pieceList(p, c => c === (w ? 'P' : 'p')).length > 0),
       apply(p, rand) {
         const q = clonePos(p), zaps = [];
         q.ep = null;
+        const count = CH.mult || 1;
         for (const w of [true, false]) {
-          const L = pieceList(q, c => c === (w ? 'P' : 'p')), [r, f] = L[Math.floor(rand() * L.length)];
-          q.b[r][f] = null;
-          zaps.push([r, f]);
+          const L = pieceList(q, c => c === (w ? 'P' : 'p'));
+          for (let i = 0; i < count && L.length > 0; i++) {
+            const idx = Math.floor(rand() * L.length);
+            const [r, f] = L.splice(idx, 1)[0];
+            q.b[r][f] = null;
+            zaps.push([r, f]);
+          }
         }
         return { p: q, zaps };
       }
@@ -423,11 +434,21 @@
       id: 'meteor', name: 'Meteor', color: '#d83a2a', sound: 'quake', desc: 'A meteor smashes a 2×2 area: everything but kings and queens is destroyed.',
       canFire: p => meteorOpts(p).length > 0,
       apply(p, rand) {
-        const q = clonePos(p), o = meteorOpts(q), hit = o[Math.floor(rand() * o.length)];
+        const q = clonePos(p), o = meteorOpts(q).slice();
+        const count = Math.min(CH.mult || 1, o.length);
+        const zaps = [];
         q.ep = null;
-        hit.forEach(([r, f]) => { q.b[r][f] = null; });
+        for (let i = 0; i < count; i++) {
+          if (!o.length) break;
+          const idx = Math.floor(rand() * o.length);
+          const hit = o.splice(idx, 1)[0];
+          hit.forEach(([r, f]) => {
+            q.b[r][f] = null;
+            if (!zaps.some(z => z[0] === r && z[1] === f)) zaps.push([r, f]);
+          });
+        }
         fixCast(q);
-        return { p: q, zaps: hit };
+        return { p: q, zaps };
       }
     },
     {
@@ -447,17 +468,21 @@
       apply: p => stamp(p)
     },
     {
-      id: 'reinforce', name: 'Reinforcements', color: '#3a9a4a', sound: 'portal', desc: 'Each side gets a new pawn on its pawn rank.',
+      id: 'reinforce', name: 'Reinforcements', color: '#3a9a4a', sound: 'portal', desc: 'Each side gets new pawns on its pawn rank.',
       canFire: p => [true, false].every(w => p.b[w ? p.b.length - 2 : 1].some(c => !c)),
       apply(p, rand) {
         const q = clonePos(p), pops = [];
         q.ep = null;
+        const count = CH.mult || 1;
         for (const w of [true, false]) {
           const row = w ? q.b.length - 2 : 1, e = [];
           for (let f = 0; f < 8; f++) if (!q.b[row][f]) e.push(f);
-          const f = e[Math.floor(rand() * e.length)];
-          q.b[row][f] = w ? 'P' : 'p';
-          pops.push([row, f]);
+          for (let i = 0; i < count && e.length > 0; i++) {
+            const idx = Math.floor(rand() * e.length);
+            const f = e.splice(idx, 1)[0];
+            q.b[row][f] = w ? 'P' : 'p';
+            pops.push([row, f]);
+          }
         }
         return { p: q, pops };
       }
@@ -652,14 +677,17 @@
       }
     },
     {
-      id: 'magma', name: 'Magma Floor', color: '#dc2626', sound: 'quake', desc: 'Two tactical squares turn into boiling lava for 3 moves.',
+      id: 'magma', name: 'Magma Floor', color: '#dc2626', sound: 'quake', desc: 'Tactical squares turn into boiling lava for 3 moves.',
       canFire: p => !p.magma && activeEmptySqs(p).length >= 2,
       apply(p, rand) {
         const q = clonePos(p), e = activeEmptySqs(q).slice();
-        const sq1 = pickOut(e, rand);
-        const sq2 = pickOut(e, rand);
-        q.magma = { sqs: [sq1, sq2], ttl: 4 };
-        return { p: q, pops: [sq1, sq2] };
+        const count = Math.min((CH.mult || 1) + 1, e.length);
+        const sqs = [];
+        for (let i = 0; i < count; i++) {
+          sqs.push(pickOut(e, rand));
+        }
+        q.magma = { sqs, ttl: 4 };
+        return { p: q, pops: sqs };
       }
     }
   ];
@@ -691,25 +719,45 @@
     const rand = mulberry(g.chaos.seed + (g.chaos.n + 1) * 977);
 
     if (ev.id === 'meteor') {
-      const o = meteorOpts(p);
-      if (o.length) return o[Math.floor(rand() * o.length)];
+      const o = meteorOpts(p).slice();
+      const count = Math.min(CH.mult || 1, o.length);
+      const zones = [];
+      for (let i = 0; i < count; i++) {
+        if (!o.length) break;
+        const idx = Math.floor(rand() * o.length);
+        const hit = o.splice(idx, 1)[0];
+        hit.forEach(([r, f]) => {
+          if (!zones.some(z => z[0] === r && z[1] === f)) zones.push([r, f]);
+        });
+      }
+      return zones;
     } else if (ev.id === 'zap') {
       const zones = [];
+      const count = CH.mult || 1;
       for (const w of [true, false]) {
         const L = pieceList(p, c => c === (w ? 'P' : 'p'));
-        if (L.length) zones.push(L[Math.floor(rand() * L.length)]);
+        for (let i = 0; i < count && L.length > 0; i++) {
+          const idx = Math.floor(rand() * L.length);
+          zones.push(L.splice(idx, 1)[0]);
+        }
       }
       return zones;
     } else if (ev.id === 'magma') {
       const e = activeEmptySqs(p).slice();
-      if (e.length >= 2) {
-        const s1 = pickOut(e, rand);
-        const s2 = pickOut(e, rand);
-        return [s1, s2];
+      const count = Math.min((CH.mult || 1) + 1, e.length);
+      const zones = [];
+      for (let i = 0; i < count; i++) {
+        zones.push(pickOut(e, rand));
       }
+      return zones;
     } else if (ev.id === 'frozen') {
-      const e = activeEmptySqs(p);
-      if (e.length) return [e[Math.floor(rand() * e.length)]];
+      const e = activeEmptySqs(p).slice();
+      const count = Math.min(CH.mult || 1, e.length);
+      const zones = [];
+      for (let i = 0; i < count; i++) {
+        zones.push(pickOut(e, rand));
+      }
+      return zones;
     }
     return [];
   }
@@ -798,15 +846,16 @@
   }
 
   const PRE = {
-    mild: { every: 7, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'fog', 'mutate', 'bounty', 'phantom'] },
-    wild: { every: 5, burst: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'rush', 'fog', 'dtime', 'zap', 'mutate', 'mirror', 'reinforce', 'trade', 'coronate', 'blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'] },
-    mayhem: { every: 3, burst: 2, ev: EVENTS.map(e => e.id) }
+    mild: { every: 7, burst: 1, mult: 1, ev: ['quake', 'portal', 'frozen', 'swap', 'fog', 'mutate', 'bounty', 'phantom'] },
+    wild: { every: 5, burst: 1, mult: 2, ev: ['quake', 'portal', 'frozen', 'swap', 'rush', 'fog', 'dtime', 'zap', 'mutate', 'mirror', 'reinforce', 'trade', 'coronate', 'blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'] },
+    mayhem: { every: 3, burst: 2, mult: 3, ev: EVENTS.map(e => e.id) }
   };
 
   const preObj = n => ({
     on: true,
     every: PRE[n].every,
     burst: PRE[n].burst,
+    mult: PRE[n].mult,
     off: EVENTS.filter(e => !PRE[n].ev.includes(e.id)).map(e => e.id),
     int: n
   });
