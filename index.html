@@ -770,7 +770,7 @@ const {
   emptyRows, tideRows, meteorOpts, defOpts, fixCast, grav,
   coronate, tradeOpts, stamp, mirrorRows, nbOf, riftOf,
   validate, EVENTS, chaosPick, ageEffects, evReset, chaosTick, PRE, preObj,
-  isOverdrive, computeDangerZones, activeEmptySqs
+  isOverdrive, computeDangerZones, activeEmptySqs, runEvent, staleState
 } = ChaosModule;
 
 let NR = 8;
@@ -942,7 +942,7 @@ function fresh(seed) {
   reset();
   G.chaos = { seed: seed || ((Math.random() * 4e9) >>> 0), meter: CH.start, max: CH.start, n: 0, next: null, last: null };
   document.getElementById('clog').textContent = '';
-  G.sans = []; G.scol = []; G.caps = [];
+  G.sans = []; G.scol = []; G.caps = []; G.drafts = {};
   last = null; sel = null; targets = []; pend = null; promoEl.hidden = true;
 }
 
@@ -979,16 +979,14 @@ function animate(m) {
   setTimeout(() => { el.style.zIndex = ''; el.classList.remove('land', 'pop'); }, 700);
 }
 
-function showDraftModal(onChosen) {
+function showDraftModal(pos, firedEv, onChosen) {
   const modal = document.getElementById('draftModal');
   const cards = document.getElementById('draftCards');
-  if (!modal || !cards) { onChosen(null); return; }
-  const ev1 = chaosPick(G);
-  const remaining = EVENTS.filter(e => e.on && e.canFire(G.pos) && (!ev1 || e.id !== ev1.id));
-  const ev2 = remaining.length ? remaining[Math.floor(mulberry(G.chaos.seed + G.chaos.n * 73)() * remaining.length)] : ev1;
-  if (!ev1) { onChosen(null); return; }
+  const others = EVENTS.filter(e => e.on && e.canFire(pos) && e.id !== firedEv.id);
+  if (!modal || !cards || !others.length) { onChosen(firedEv); return; }
+  const ev2 = others[Math.floor(mulberry(G.chaos.seed + G.chaos.n * 73)() * others.length)];
 
-  cards.innerHTML = [ev1, ev2].map((ev, i) => `
+  cards.innerHTML = [firedEv, ev2].map((ev, i) => `
     <div class="draft-card" data-idx="${i}">
       <h4 style="color:${ev.color};">${ev.name}</h4>
       <p>${ev.desc}</p>
@@ -1002,7 +1000,7 @@ function showDraftModal(onChosen) {
     if (!card) return;
     modal.style.display = 'none';
     modal.removeEventListener('click', clickHandler);
-    onChosen(card.dataset.idx === '1' ? ev2 : ev1);
+    onChosen(card.dataset.idx === '1' ? ev2 : firedEv);
   };
   modal.addEventListener('click', clickHandler);
 }
@@ -1033,22 +1031,21 @@ function commit(m) {
   if (r.ch) fxHold = true;
   paint(); info();
   if (r.ch) {
-    if (chaosDraftOn && mode !== 'online' && (!vsAI() || G.pos.turn === human)) {
-      showDraftModal(chosenEv => {
+    const single = !r.ch.rejected && r.ch.before && !(r.ch.more && r.ch.more.length);
+    if (chaosDraftOn && mode !== 'online' && single && (!vsAI() || G.pos.turn === human)) {
+      const fired = r.ch;
+      showDraftModal(fired.before, fired.ev, chosenEv => { // choose BEFORE the event lands: swap it for the pick
         fxHold = false;
-        if (chosenEv && chosenEv.id !== r.ch.ev.id) {
-          const rand = mulberry(G.chaos.seed + G.chaos.n * 977);
-          const out = chosenEv.apply(G.pos, rand);
-          const err = validate(G.pos, out.p);
-          if (!err) {
-            G.pos = out.p;
-            fireFx({ ev: chosenEv, ...out, changed: true });
-          } else {
-            fireFx(r.ch);
+        if (chosenEv && chosenEv.id !== fired.ev.id) {
+          const rr = runEvent(chosenEv, fired.before, mulberry(G.chaos.seed + G.chaos.n * 977));
+          if (!rr.err) {
+            G.pos = rr.out.p; evReset(G.pos, G.seen); G.chaos.last = chosenEv.id;
+            (G.drafts = G.drafts || {})[G.chaos.n] = chosenEv.id;
+            fireFx({ ev: chosenEv, ...rr.out, changed: true, after: rr.out.p, before: fired.before });
+            return;
           }
-        } else {
-          fireFx(r.ch);
         }
+        fireFx(fired);
       });
     } else {
       const g = G; setTimeout(() => { fxHold = false; if (G === g) fireFx(r.ch); }, 380);
@@ -1086,8 +1083,10 @@ function undo() {
   }
   if (busy || thinking || !G.hist.length) return;
   const n = vsAI() && G.pos.turn === human && G.hist.length > 1 ? 2 : 1;
-  const h = G.hist.slice(0, -n), seed = G.chaos.seed;
-  fresh(seed); h.forEach(m => record(m)); render(); maybeAI();
+  const h = G.hist.slice(0, -n), seed = G.chaos.seed, drafts = G.drafts || {};
+  fresh(seed); G.drafts = drafts; h.forEach(m => record(m));
+  Object.keys(drafts).forEach(k => { if (+k > G.chaos.n) delete drafts[k]; });
+  render(); maybeAI();
 }
 
 function resign() {
@@ -1115,7 +1114,10 @@ promoEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || !pend) return;
   const m = pend.find(x => x.promo === b.dataset.q); promoEl.hidden = true; pend = null; commit(m);
 });
-document.getElementById('new').addEventListener('click', startGame);
+document.getElementById('new').addEventListener('click', () => {
+  if (mode === 'online') { showToast('Switch mode to leave the online match before starting a new game', 3000); return; }
+  startGame();
+});
 document.getElementById('undo').addEventListener('click', undo);
 document.getElementById('flip').addEventListener('click', flip);
 document.getElementById('resign').addEventListener('click', resign);
@@ -1125,6 +1127,7 @@ document.getElementById('test').addEventListener('click', runTests);
 function clog(t) { const e = document.getElementById('clog'); e.textContent += t + '\n'; }
 
 const boardEl = document.getElementById('board'), toastEl = document.getElementById('toast'), flashEl = document.getElementById('flash');
+function showToast(t, ms) { toastEl.textContent = t; restart(toastEl, 'show'); clearTimeout(window._tt); window._tt = setTimeout(() => toastEl.classList.remove('show'), ms || 2500); }
 function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
 let fxHold = false, fxSig = '';
 const fxEl = document.getElementById('fx');
@@ -1164,6 +1167,7 @@ function applyFog() {
 }
 
 function fireFx(res, rest) {
+  if (res.ev && typeof res.ev.apply !== 'function') { const real = EVENTS.find(e => e.id === res.ev.id); if (real) res.ev = real; }
   rest = rest || res.more || []; fxHold = rest.length > 0;
   if (rest.length) { const g = G; setTimeout(() => { if (G === g) fireFx(rest[0], rest.slice(1)); }, 1400); }
   toastEl.textContent = res.rejected ? 'Chaos fizzled: blocked by safety rules' : res.ev.name.toUpperCase() + ' · ' + (res.msg || res.ev.desc);
@@ -1223,7 +1227,7 @@ function chaosUI() {
     text += 'Next: ' + c.next.name + (CH.burst > 1 ? ' +' + (CH.burst - 1) + ' more' : '');
     if (c.danger && c.danger.length) {
       const dangerNames = c.danger.map(([r, f]) => FILES[f] + (UR - r)).join(', ');
-      text += ' · ⚠️ EVACUATE: ' + dangerNames;
+      text += (['meteor', 'zap'].includes(c.next.id) ? ' · ⚠️ EVACUATE: ' : ' · 🎯 Target squares: ') + dangerNames;
     }
   } else {
     text += 'Chaos in ' + c.meter + (c.meter === 1 ? ' move' : ' moves');
@@ -1252,15 +1256,15 @@ function chaosStress() {
       for (let ply = 0; ply < 90; ply++) {
         const ms = legal(p); if (!ms.length) break;
         p = make(p, ms[Math.floor(rand() * ms.length)]);
-        for (const k of ['portal', 'frozen', 'fog']) if (p[k]) p[k] = p[k].ttl > 1 ? { ...p[k], ttl: p[k].ttl - 1 } : null;
+        ageEffects(p);
         if (ply % 3 !== 2) continue;
         for (const ev of EVENTS) {
           if (!ev.canFire(p) || !legal(p).length) continue;
-          const out = ev.apply(p, rand), err = validate(p, out.p);
+          const { out, err } = runEvent(ev, p, rand);
           if (err) { st[ev.id].rej++; continue; }
           st[ev.id].ok++; p = out.p;
           const n = out.p.b.flat().filter(c => c && c.toLowerCase() === 'k').length;
-          if (n !== 2 || !legal(p).length) bad++;
+          if (n !== 2 || !legal(p).length || staleState(p).length) bad++;
         }
       }
     }
@@ -1333,9 +1337,8 @@ function easyMove(p) {
 
 function simEvent(q, ev, seed) {
   if (!ev.on || !ev.canFire(q)) return q;
-  const rand = mulberry(seed);
-  for (let i = 0; i < 8; i++) { const o = ev.apply(q, rand); if (!validate(q, o.p)) return o.p; }
-  return q;
+  const { out, err } = runEvent(ev, q, mulberry(seed));
+  return err ? q : out.p;
 }
 
 function aiMove(p, e) {
@@ -1477,6 +1480,7 @@ function applyOnlineMatchState(match) {
     G.seen = match.gameState.seen || {};
     G.seen[posKey(G.pos)] = (G.seen[posKey(G.pos)] || 0) + 1;
     G.chaos = match.gameState.chaos || { seed: match.seed, meter: CH.start, max: CH.start, n: 0, next: null, last: null };
+    if (G.chaos.next && typeof G.chaos.next.canFire !== 'function') G.chaos.next = EVENTS.find(e => e.id === (G.chaos.next.id || G.chaos.next)) || null;
   } else {
     fresh(match.seed);
   }
@@ -1523,8 +1527,7 @@ function applyOnlineMatchState(match) {
     G.result = match.result || 'Game completed';
     snd('end');
     statusEl.textContent = 'Game Over: ' + G.result;
-    bannerEl.textContent = G.result;
-    restart(bannerEl, 'show');
+    bannerEl.innerHTML = '<b>Game Over</b><span>' + G.result + '</span>'; bannerEl.style.setProperty('--bc', '#e8a010'); restart(bannerEl, 'go');
   } else {
     const myCol = match.myColor === 'w' ? 'White' : 'Black';
     const isMyTurn = G.pos.turn === match.myColor;
@@ -1644,6 +1647,7 @@ if (Multiplayer) {
 if (queueJoinBtn) {
   queueJoinBtn.addEventListener('click', () => {
     if (Matchmaking) Matchmaking.joinQueue();
+    else showToast('Online play is unavailable: src/online/*.js did not load', 3500);
   });
 }
 if (queueCancelBtn) {
@@ -1727,23 +1731,15 @@ populateTriggerSelects();
 function fireSpecificEvent(evId) {
   const ev = EVENTS.find(e => e.id === evId);
   if (!ev) return;
-  const rand = mulberry(((Math.random() * 4e9) >>> 0));
-  let out, err;
-  for (let t = 0; t < 8; t++) {
-    out = ev.apply(G.pos, rand);
-    err = validate(G.pos, out.p);
-    if (!err) break;
-  }
-  if (err) {
-    toastEl.textContent = ev.name + ' fizzled: ' + err;
-    restart(toastEl, 'show');
-    return;
-  }
+  if (mode === 'online') { showToast('Instant triggers are disabled in online matches'); return; }
+  if (G.result || status(G, rescue).over) return;
+  if (!ev.canFire(G.pos)) { showToast(ev.name + " can't fire in this position"); return; }
+  const { out, err } = runEvent(ev, G.pos, mulberry((Math.random() * 4e9) >>> 0));
+  if (err) { showToast(ev.name + ' fizzled: ' + err); return; }
   const before = posKey(G.pos), prev = G.pos;
   G.pos = out.p;
   evReset(G.pos, G.seen);
   fireFx({ ev, ...out, changed: before !== posKey(G.pos), after: out.p, before: prev });
-  render();
   chaosUI();
 }
 
@@ -1772,6 +1768,7 @@ function selectOnlyNewEvents() {
     draft: chaosDraftOn,
     off: EVENTS.filter(e => !e.on).map(e => e.id)
   });
+  if (G.chaos.next && !G.chaos.next.on) G.chaos.next = chaosPick(G);
   chaosUI();
 }
 function selectAllEvents() {
@@ -1838,6 +1835,7 @@ function applySet(s) {
     EVENTS.forEach(e => {
       const l = document.createElement('label'), c = document.createElement('input');
       c.type = 'checkbox';
+      c.className = 'evchk'; c.dataset.id = e.id;
       c.checked = e.on;
       c.addEventListener('change', () => {
         e.on = c.checked;
@@ -1846,8 +1844,8 @@ function applySet(s) {
         if (intEl) intEl.value = 'custom';
         if (intMEl) intMEl.value = 'custom';
         saveSet();
+        syncEvChecks();
         chaosUI();
-        applySet({ ...s, int: 'custom', off: EVENTS.filter(x => !x.on).map(x => x.id) });
       });
       const isNew = NEW_IDS.includes(e.id);
       l.append(c, ' ' + e.name + (isNew ? ' ✨' : ''));
@@ -1859,9 +1857,11 @@ function applySet(s) {
   buildEvs(evsMEl);
 }
 
+function syncEvChecks() { document.querySelectorAll('.evchk').forEach(c => { const e = EVENTS.find(x => x.id === c.dataset.id); if (e) c.checked = e.on; }); }
+
 function onIntChange(val) {
   if (!PRE[val]) return;
-  applySet(preObj(val));
+  applySet({ ...preObj(val), on: chaosOn, draft: chaosDraftOn });
   syncMeter();
   if (G.chaos.next && !G.chaos.next.on) G.chaos.next = chaosPick(G);
   saveSet();
@@ -1928,7 +1928,7 @@ if (draftEl) draftEl.addEventListener('change', () => onDraftToggle(draftEl.chec
 if (draftMEl) draftMEl.addEventListener('change', () => onDraftToggle(draftMEl.checked));
 
 let saved = {}; try { saved = JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) {}
-if (!saved.int || PRE[saved.int]) saved = preObj(saved.int || 'wild');
+if (!saved.int || PRE[saved.int]) saved = { ...preObj(saved.int || 'wild'), on: saved.on !== false, draft: !!saved.draft };
 applySet(saved);
 
 function playtest() {
@@ -1999,9 +1999,9 @@ function miniBoard(p, ref) {
     const c = p.b[r][f]; let cls = (r + f) % 2 ? 'd' : 'l';
     if (same && ref.b[r][f] !== c) cls += ' df';
     if (hit(p.portal, r, f)) cls += ' pt';
-    if (p.frozen && p.frozen.sq[0] === r && p.frozen.sq[1] === f) cls += ' ic';
+    if (p.frozen && (p.frozen.sqs || [p.frozen.sq]).some(s => s[0] === r && s[1] === f)) cls += ' ic';
     if (p.magma && p.magma.sqs && p.magma.sqs.some(s => s[0] === r && s[1] === f)) cls += ' mg';
-    if (p.phantom && p.phantom.sq[0] === r && p.phantom.sq[1] === f) cls += ' ph';
+    if (p.phantom && (p.phantom.sqs || [p.phantom.sq]).some(s => s[0] === r && s[1] === f)) cls += ' ph';
     if (p.bounty && p.bounty.sq[0] === r && p.bounty.sq[1] === f) cls += ' bn';
     h += '<div class="' + cls + '">' + (c && !(p.fog && !isW(c)) ? pieceHTML(c) : '') + '</div>';
   }
@@ -2143,7 +2143,7 @@ function syncMeter() {
 function drawTests() {
   const log = document.getElementById('clog'), keep = G, keepOn = chaosOn, re = EVENTS.find(e => e.id === 'reinforce'), keepRe = re.on, out = [];
   const chk = (name, ok, info) => out.push((ok ? 'PASS ' : 'FAIL ') + name + (ok ? '' : ' (got: ' + info + ')'));
-  const st = (fen, hm) => { const p = newPos(fen); if (hm != null) p.hm = hm; return status({ pos: p, seen: {} }).text; };
+  const st = (fen, hm) => { const p = newPos(fen); if (hm != null) p.hm = hm; return status({ pos: p, seen: {} }, rescue).text; };
   chaosOn = false;
   [['Stalemate', '7k/5Q2/6K1/8/8/8/8/8 b - - 0 1', 'stalemate'],
    ['King vs king', '4k3/8/8/8/8/8/8/4K3 w - - 0 1', 'insufficient'],
@@ -2309,6 +2309,7 @@ if (btnPlayOnline) {
     document.getElementById('elol').style.opacity = .4;
     showView('game');
     if (Matchmaking) Matchmaking.joinQueue();
+    else showToast('Online play is unavailable: src/online/*.js did not load', 3500);
   });
 }
 

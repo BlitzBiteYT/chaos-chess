@@ -131,7 +131,7 @@
     const o = [];
     for (const w of [true, false]) {
       let best = null;
-      for (let r = 0; r < 8; r++) {
+      for (let r = 0; r < p.b.length; r++) {
         for (let f = 0; f < 8; f++) {
           if (p.b[r][f] !== (w ? 'P' : 'p')) continue;
           const adv = w ? p.b.length - 1 - r : r;
@@ -151,20 +151,31 @@
     return { p: q, pops: t.map(x => [x[0], x[1]]) };
   };
 
+  // Apply a square-mapping function to every tracked effect (portal, frozen, magma, phantom, bounty, overcharge)
+  const mapState = (q, fn) => {
+    const one = s => (s ? fn(s) : s);
+    const many = a => a.map(fn).filter(Boolean);
+    if (q.portal) { const a = one(q.portal.a), b = one(q.portal.b); q.portal = a && b ? { ...q.portal, a, b } : null; }
+    for (const k of ['frozen', 'phantom']) {
+      if (!q[k]) continue;
+      const sqs = many(q[k].sqs || (q[k].sq ? [q[k].sq] : []));
+      q[k] = sqs.length ? { ...q[k], sqs, sq: sqs[0] } : null;
+    }
+    if (q.magma) { const sqs = many(q.magma.sqs); q.magma = sqs.length ? { ...q.magma, sqs } : null; }
+    if (q.bounty) { const sq = one(q.bounty.sq); q.bounty = sq ? { ...q.bounty, sq } : null; }
+    if (q.overcharged) {
+      const w = one(q.overcharged.w), b = one(q.overcharged.b);
+      q.overcharged = w || b ? { ...q.overcharged, w, b } : null;
+    }
+  };
+
   const reshape = (p, k, d) => {
     const q = clonePos(p);
     q.ep = null;
     if (d > 0) q.b.splice(k, 0, Array(8).fill(null));
     else q.b.splice(k, 1);
     const mv = t => t[0] < k ? t : d > 0 ? [t[0] + 1, t[1]] : t[0] === k ? null : [t[0] - 1, t[1]];
-    if (q.portal) {
-      const a = mv(q.portal.a), b = mv(q.portal.b);
-      q.portal = a && b ? { ...q.portal, a, b } : null;
-    }
-    if (q.frozen) {
-      const t = mv(q.frozen.sq);
-      q.frozen = t ? { ...q.frozen, sq: t } : null;
-    }
+    mapState(q, mv);
     return q;
   };
 
@@ -281,6 +292,15 @@
   const nbOf = (p, w) => pieceList(p, c => isW(c) === w && 'nb'.includes(c.toLowerCase()));
   const riftOf = (p, w) => pieceList(p, c => isW(c) === w && !'pk'.includes(c.toLowerCase()));
 
+  // Knights, bishops and rooks a side has lost relative to the starting set
+  const fallen = (p, w) => {
+    const n = { n: 0, b: 0, r: 0 }, o = [];
+    for (const row of p.b) for (const c of row) if (c && isW(c) === w && n[c.toLowerCase()] !== undefined) n[c.toLowerCase()]++;
+    for (const t of 'nbr') for (let i = n[t]; i < 2; i++) o.push(t);
+    return o;
+  };
+  const openBack = (p, w) => { const row = w ? p.b.length - 1 : 0, o = []; for (let f = 0; f < 8; f++) if (!p.b[row][f]) o.push(f); return o; };
+
   // Safety rules: an event may never break these, or it is rejected
   function validate(a, b) {
     const cnt = p => {
@@ -299,6 +319,52 @@
     }
     if (legal(a).length && !legal(b).length) return 'would end the game';
     return null;
+  }
+
+  // Keep bounty / overcharge markers on their pieces after an event moved or removed things
+  const remapTracked = (q, slides) => {
+    const mv = new Map((slides || []).map(s => [s.from[0] + ',' + s.from[1], s.to]));
+    const re = s => (s && mv.get(s[0] + ',' + s[1])) || s;
+    const at = s => (s && q.b[s[0]] ? q.b[s[0]][s[1]] : null);
+    if (q.bounty) {
+      const sq = re(q.bounty.sq);
+      q.bounty = at(sq) === q.bounty.piece ? { ...q.bounty, sq } : null;
+    }
+    if (q.overcharged) {
+      const ok = (s, w) => { const c = at(s); return !!c && 'nb'.includes(c.toLowerCase()) && isW(c) === w; };
+      const w = re(q.overcharged.w), b = re(q.overcharged.b);
+      const o = { ...q.overcharged, w: ok(w, true) ? w : null, b: ok(b, false) ? b : null };
+      q.overcharged = o.w || o.b ? o : null;
+    }
+  };
+
+  // Problems with tracked squares in a position (used by the developer tests)
+  function staleState(q) {
+    const R = q.b.length, o = [];
+    const at = s => (s && s[0] >= 0 && s[0] < R ? q.b[s[0]][s[1]] : undefined);
+    if (q.bounty && at(q.bounty.sq) !== q.bounty.piece) o.push('bounty');
+    if (q.overcharged) {
+      const bad = (s, w) => { const c = at(s); return !c || !'nb'.includes(c.toLowerCase()) || isW(c) !== w; };
+      if (q.overcharged.w && bad(q.overcharged.w, true)) o.push('overcharge.w');
+      if (q.overcharged.b && bad(q.overcharged.b, false)) o.push('overcharge.b');
+    }
+    for (const k of ['frozen', 'magma', 'phantom']) {
+      if (q[k]) (q[k].sqs || (q[k].sq ? [q[k].sq] : [])).forEach(s => { if (s[0] < 0 || s[0] >= R) o.push(k); });
+    }
+    if (q.portal) [q.portal.a, q.portal.b].forEach(s => { if (s[0] < 0 || s[0] >= R) o.push('portal'); });
+    return o;
+  }
+
+  // Apply an event with retries, then fix tracked markers and run the safety rules
+  function runEvent(ev, pos, rand, lock) {
+    let out = null, err = null;
+    for (let t = 0; t < 8; t++) {
+      out = ev.apply(pos, rand, lock);
+      remapTracked(out.p, out.slides);
+      err = validate(pos, out.p);
+      if (!err) break;
+    }
+    return { out, err };
   }
 
   const EVENTS = [
@@ -334,11 +400,12 @@
     {
       id: 'frozen', name: 'Frozen Square', color: '#4aa8e8', sound: 'ice', desc: 'Tactical squares are frozen in ice: nobody can move onto them.',
       canFire: p => !p.frozen && activeEmptySqs(p).length > 0,
-      apply(p, rand) {
+      apply(p, rand, lock) {
         const q = clonePos(p), e = activeEmptySqs(q).slice();
         const count = Math.min(CH.mult || 1, e.length);
         const sqs = [];
-        for (let i = 0; i < count; i++) {
+        if (lock && lock.length) lock.forEach(s => sqs.push(s.slice()));
+        else for (let i = 0; i < count; i++) {
           sqs.push(pickOut(e, rand));
         }
         q.frozen = { sqs, sq: sqs[0], ttl: 4 };
@@ -384,9 +451,13 @@
     {
       id: 'zap', name: 'Lightning', color: '#f2c230', sound: 'zap', desc: 'Pawns are struck down by lightning.',
       canFire: p => [true, false].every(w => pieceList(p, c => c === (w ? 'P' : 'p')).length > 0),
-      apply(p, rand) {
+      apply(p, rand, lock) {
         const q = clonePos(p), zaps = [];
         q.ep = null;
+        if (lock && lock.length) { // strike what stands on the warned squares now
+          lock.forEach(([r, f]) => { const c = q.b[r] && q.b[r][f]; if (c && c.toLowerCase() === 'p') { q.b[r][f] = null; zaps.push([r, f]); } });
+          return { p: q, zaps };
+        }
         const count = CH.mult || 1;
         for (const w of [true, false]) {
           const L = pieceList(q, c => c === (w ? 'P' : 'p'));
@@ -433,8 +504,15 @@
     {
       id: 'meteor', name: 'Meteor', color: '#d83a2a', sound: 'quake', desc: 'A meteor smashes a 2×2 area: everything but kings and queens is destroyed.',
       canFire: p => meteorOpts(p).length > 0,
-      apply(p, rand) {
+      apply(p, rand, lock) {
         const q = clonePos(p), o = meteorOpts(q).slice();
+        if (lock && lock.length) {
+          const zs = [];
+          q.ep = null;
+          lock.forEach(([r, f]) => { const c = q.b[r] && q.b[r][f]; if (c && !'kKqQ'.includes(c)) { q.b[r][f] = null; zs.push([r, f]); } });
+          fixCast(q);
+          return { p: q, zaps: zs };
+        }
         const count = Math.min(CH.mult || 1, o.length);
         const zaps = [];
         q.ep = null;
@@ -605,7 +683,7 @@
                 if (c.toLowerCase() === 'p' && (tr === 0 || tr === nr - 1)) continue;
                 q.b[tr][tf] = c;
                 q.b[r][f] = null;
-                slides.push({ from: [r, f], to: [tr, tf] });
+                const prev = slides.find(s => s.to[0] === r && s.to[1] === f); if (prev) prev.to = [tr, tf]; else slides.push({ from: [r, f], to: [tr, tf] });
               }
             }
           }
@@ -663,11 +741,8 @@
       }
     },
     {
-      id: 'necromancy', name: 'Necromancy', color: '#10b981', sound: 'portal', desc: 'Fallen pieces rise from the dead onto empty squares on the back rank.',
-      canFire: p => {
-        const nr = p.b.length;
-        return [0, 1, 2, 3, 4, 5, 6, 7].some(f => !p.b[nr - 1][f] || !p.b[0][f]);
-      },
+      id: 'necromancy', name: 'Necromancy', color: '#10b981', sound: 'portal', desc: 'Fallen knights, bishops and rooks rise again on empty back-rank squares.',
+      canFire: p => [true, false].some(w => fallen(p, w).length > 0 && openBack(p, w).length > 0),
       apply(p, rand) {
         const q = clonePos(p), nr = q.b.length, pops = [];
         q.ep = null;
@@ -676,10 +751,11 @@
           const row = w ? nr - 1 : 0;
           const openCols = [];
           for (let f = 0; f < 8; f++) if (!q.b[row][f]) openCols.push(f);
-          for (let i = 0; i < count && openCols.length > 0; i++) {
+          const lost = fallen(q, w);
+          for (let i = 0; i < count && openCols.length > 0 && lost.length > 0; i++) {
             const idx = Math.floor(rand() * openCols.length);
             const f = openCols.splice(idx, 1)[0];
-            const resurrected = rand() < .5 ? 'n' : 'b';
+            const resurrected = lost.splice(Math.floor(rand() * lost.length), 1)[0];
             q.b[row][f] = w ? resurrected.toUpperCase() : resurrected;
             pops.push([row, f]);
           }
@@ -691,11 +767,12 @@
     {
       id: 'magma', name: 'Magma Floor', color: '#dc2626', sound: 'quake', desc: 'Tactical squares turn into boiling lava for 3 moves.',
       canFire: p => !p.magma && activeEmptySqs(p).length >= 2,
-      apply(p, rand) {
+      apply(p, rand, lock) {
         const q = clonePos(p), e = activeEmptySqs(q).slice();
         const count = Math.min((CH.mult || 1) + 1, e.length);
         const sqs = [];
-        for (let i = 0; i < count; i++) {
+        if (lock && lock.length) lock.forEach(s => sqs.push(s.slice()));
+        else for (let i = 0; i < count; i++) {
           sqs.push(pickOut(e, rand));
         }
         q.magma = { sqs, ttl: 4 };
@@ -798,6 +875,7 @@
     const c = G.chaos;
     ageEffects(G.pos);
     if (!chaosOn) return null;
+    const lockZones = c.danger || [];
     c.meter--;
     if (c.meter === 1) {
       c.next = chaosPick(G);
@@ -822,8 +900,11 @@
 
     for (let i = 0; i < CH.burst; i++) {
       if (!legal(G.pos).length) break;
-      let ev = i ? null : c.next;
+      const planned = i ? null : c.next;
+      let ev = planned;
       if (!ev || !ev.on || !ev.canFire(G.pos)) ev = chaosPick(G);
+      const forced = G.drafts && G.drafts[c.n + 1]; // replaying a drafted choice (undo)
+      if (forced) ev = EVENTS.find(e => e.id === forced) || ev;
       c.n++;
       c.next = null;
       if (!ev) {
@@ -832,12 +913,8 @@
       }
       c.last = ev.id;
       const rand = mulberry(c.seed + c.n * 977);
-      let out, err;
-      for (let t = 0; t < 8; t++) {
-        out = ev.apply(G.pos, rand);
-        err = validate(G.pos, out.p);
-        if (!err) break;
-      }
+      const lock = planned && ev === planned && !forced && lockZones.length ? lockZones : null;
+      const { out, err } = runEvent(ev, G.pos, rand, lock);
       if (err) {
         log('Ply ' + (G.hist ? G.hist.length : 0) + ': ' + ev.name + ' REJECTED (' + err + ')');
         list.push({ ev, rejected: err });
@@ -908,6 +985,9 @@
     isOverdrive,
     computeDangerZones,
     PRE,
-    preObj
+    preObj,
+    runEvent,
+    staleState,
+    fallen
   };
 }));
