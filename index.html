@@ -290,6 +290,9 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
 .mb .df{outline:2px solid #e8a010;outline-offset:-2px}
 .mb .pt{box-shadow:inset 0 0 0 100px rgba(142,92,240,.6)}
 .mb .ic{box-shadow:inset 0 0 0 100px rgba(105,180,240,.65)}
+.mb .mg{box-shadow:inset 0 0 0 100px rgba(220,38,38,.7)}
+.mb .ph{box-shadow:inset 0 0 0 100px rgba(6,182,212,.6)}
+.mb .bn{outline:2px solid #f59e0b;outline-offset:-2px}
 .dev{margin-top:20px;color:var(--muted);font-size:.85rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}
 .dev summary{cursor:pointer;font-weight:600}
 .dev button{margin:6px 4px 6px 0;padding:6px 12px;font-size:.8rem;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--ink);cursor:pointer}
@@ -314,7 +317,8 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
   <div class="nav-tabs">
     <button type="button" id="navLobbyBtn" class="nav-tab-btn active">Lobby</button>
     <button type="button" id="navPlayBtn" class="nav-tab-btn">Play</button>
-    <button type="button" id="navGuideBtn" class="nav-tab-btn">Events Guide</button>
+    <button type="button" id="navGuideBtn" class="nav-tab-btn">Events Guide (28)</button>
+    <button type="button" id="navChangelogBtn" class="nav-tab-btn" style="color:#c084fc;">✨ Changelog</button>
   </div>
 </header>
 
@@ -323,7 +327,14 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
   <div class="lobby-wrapper">
     <div class="hero-box">
       <h1 class="hero-title">Play <span>Chaos Chess</span></h1>
-      <p class="hero-sub">Classic chess rules meet 22 game-altering, deterministic chaos events.</p>
+      <p class="hero-sub">Classic chess rules meet 28 game-altering, deterministic chaos events.</p>
+      <div id="bannerNewEvents" style="margin: 12px auto 0; background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.35); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; max-width: 600px; text-align: left;">
+        <div style="font-size: 0.85rem;">
+          <span style="background: #a855f7; color: #fff; padding: 2px 7px; border-radius: 99px; font-weight: 700; font-size: 0.72rem; margin-right: 6px;">v1.2.0 UPDATE</span>
+          <b>6 New Events Added!</b> Black Hole, King's Ransom, Phantom, Overcharge, Necromancy &amp; Magma.
+        </div>
+        <button type="button" id="btnWhatsNew" class="cc-btn cc-btn-subtle" style="padding: 4px 10px; font-size: 0.78rem; white-space: nowrap;">What's New →</button>
+      </div>
     </div>
 
     <!-- Active Game Resume Banner -->
@@ -348,7 +359,7 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
             <span class="card-icon">🌐</span>
             <h2 class="card-title">Play Online</h2>
           </div>
-          <p class="card-desc">Instant FIFO matchmaking. Synchronized moves, turns &amp; 22 deterministic chaos mechanics.</p>
+          <p class="card-desc">Instant FIFO matchmaking. Synchronized moves, turns &amp; 28 deterministic chaos mechanics.</p>
           <div class="card-meta">
             <span>● No Elo Rating</span>
             <span>● Instant Pairing</span>
@@ -571,8 +582,74 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
   <p><b>How chaos works.</b> A meter drops one step after every move by either player. When it reaches 1 the next event is announced; at 0 it fires and the meter resets. Events never put a king in check, remove a king, or end the game, and the same event never fires twice in a row. Frequency, intensity and events-per-chaos are in Chaos Settings.</p>
   <p><b>Example game.</b> 1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.c3 Nf6, and the banner now says "Next: Lightning". 5.d4 is played, the meter hits 0, and Lightning fires: one random pawn per side is struck, say White's c3 and Black's f7. You see a bolt, a big banner, a "Last event" line, and glowing squares where the board changed. Black replies 5...exd4 in a position nobody has seen before.</p>
   <p class="gx">Each card shows a demo position before and after (orange outline = changed squares). Press "Another example" for a different roll.</p>
+  <div style="display:flex; gap:8px; margin: 12px 0 16px;">
+    <button type="button" id="gfilterAll" class="cc-btn cc-btn-primary" style="padding: 6px 12px; font-size: 0.82rem;">All 28 Events</button>
+    <button type="button" id="gfilterNew" class="cc-btn cc-btn-subtle" style="padding: 6px 12px; font-size: 0.82rem; color:#c084fc;">✨ New in v1.2.0 (6 Events)</button>
+  </div>
   <div id="gcards"></div>
 </div></div>
+
+<!-- Changelog Modal -->
+<div id="changelog" hidden style="position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:50; display:flex; justify-content:center; align-items:flex-start; overflow:auto; padding:20px;">
+  <div class="gbox" style="max-width: 680px; margin: auto;">
+    <button id="clclose" type="button" style="float:right; border:1px solid var(--border); border-radius:6px; background:var(--surface-alt); color:var(--ink); padding:6px 12px; cursor:pointer;">Close</button>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="font-size:1.4rem;">📜</span>
+      <h2 style="margin:0;">Version Changelog</h2>
+    </div>
+    <p style="color:var(--muted); font-size:0.85rem; margin:2px 0 16px;">Complete update history and new mechanics in Chaos Chess.</p>
+
+    <!-- v1.2.0 -->
+    <div class="gc" style="border-top:none; padding-top:0;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#a855f7; margin:0;">v1.2.0 · Strategic Overhaul &amp; 6 New Chaos Events</h3>
+        <span style="font-size:0.75rem; background:rgba(168,85,247,.2); color:#c084fc; padding:2px 8px; border-radius:99px; font-weight:700;">LATEST</span>
+      </div>
+      <ul style="margin:8px 0; padding-left:18px; font-size:0.86rem; line-height:1.6;">
+        <li><b>6 Brand New Events:</b>
+          <br>• <b>🕳️ Black Hole:</b> Singularity pulls all pieces 1 square inward toward center.
+          <br>• <b>👑 King's Ransom:</b> Golden bounty on a minor piece rewards capturer with an extra pawn.
+          <br>• <b>👻 Phantom Split:</b> Creates an illusory decoy blocking an adjacent square.
+          <br>• <b>⚡ Overcharge:</b> Infuses one piece per side with surging electric mobility.
+          <br>• <b>🧟 Graveyard Necromancy:</b> Fallen pieces rise from the dead onto empty back ranks.
+          <br>• <b>🌋 Magma Floor:</b> Two active tactical squares turn into boiling molten lava.
+        </li>
+        <li><b>⚠️ Telegraphed Danger Zones:</b> When meter hits 1, target squares pulse red with hazard reticles, giving players 1 move to evacuate.</li>
+        <li><b>🎯 Tactical Freeze:</b> Frozen square now only targets empty squares that a piece can actually legally reach.</li>
+        <li><b>🌫️ True Fog of War:</b> Persists until the next chaos trigger; threat arrows and assist rings are completely hidden during fog.</li>
+        <li><b>⚡ Sudden Death Overdrive:</b> In endgames (&le;4 non-pawn pieces), chaos accelerates to every 3 moves with a fiery HUD.</li>
+        <li><b>🃏 Chaos Draft Mode:</b> Optional setting to choose between 2 rolled events when the meter strikes 0.</li>
+        <li><b>♟️ Chess.com Two-Screen Experience:</b> Dedicated Main Lobby dashboard + focused Chessboard screen with player strips and live status.</li>
+      </ul>
+    </div>
+
+    <!-- v1.1.0 -->
+    <div class="gc">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#81b64c; margin:0;">v1.1.0 · Online Multiplayer &amp; Serverless Realtime</h3>
+      </div>
+      <ul style="margin:8px 0; padding-left:18px; font-size:0.86rem; line-height:1.6;">
+        <li><b>Global FIFO Matchmaking:</b> Netlify Functions + Supabase PostgreSQL atomic matching.</li>
+        <li><b>Authoritative Validation:</b> Server-side legal move and seed verification preventing desyncs.</li>
+        <li><b>Seamless Reconnection:</b> Automatic state restoration on reload with persistent match ID.</li>
+        <li><b>In-Game Actions:</b> Realtime draw offers and 2-tap resign confirmation.</li>
+      </ul>
+    </div>
+
+    <!-- v1.0.0 -->
+    <div class="gc">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#38bdf8; margin:0;">v1.0.0 · Chaos Chess Foundation</h3>
+      </div>
+      <ul style="margin:8px 0; padding-left:18px; font-size:0.86rem; line-height:1.6;">
+        <li><b>22 Core Chaos Events:</b> Earthquake, Portal, Swap Meet, Promotion Rush, Lightning, Meteor, Defection, and more.</li>
+        <li><b>Custom Chess Engine:</b> Full standard chess rules, castling, en passant, promotion, and checkmate detection.</li>
+        <li><b>AI Solo Practice:</b> 4 difficulty levels with chaos adaptability.</li>
+        <li><b>Visual Assists:</b> Threat arrows, attacked piece rings, move dots, and board themes.</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <!-- Chaos Draft Modal -->
 <div id="draftModal" style="display:none;" class="draft-overlay">
@@ -1614,15 +1691,30 @@ function miniBoard(p, ref) {
     if (same && ref.b[r][f] !== c) cls += ' df';
     if (hit(p.portal, r, f)) cls += ' pt';
     if (p.frozen && p.frozen.sq[0] === r && p.frozen.sq[1] === f) cls += ' ic';
+    if (p.magma && p.magma.sqs && p.magma.sqs.some(s => s[0] === r && s[1] === f)) cls += ' mg';
+    if (p.phantom && p.phantom.sq[0] === r && p.phantom.sq[1] === f) cls += ' ph';
+    if (p.bounty && p.bounty.sq[0] === r && p.bounty.sq[1] === f) cls += ' bn';
     h += '<div class="' + cls + '">' + (c && !(p.fog && !isW(c)) ? pieceHTML(c) : '') + '</div>';
   }
   return h + '</div>';
 }
-function renderGuide() {
-  document.getElementById('gcards').innerHTML = EVENTS.map(ev => {
+
+let guideFilter = 'all';
+const NEW_EVENTS = ['blackhole', 'bounty', 'phantom', 'overcharge', 'necromancy', 'magma'];
+
+function renderGuide(filter) {
+  if (filter) guideFilter = filter;
+  const fAll = document.getElementById('gfilterAll'), fNew = document.getElementById('gfilterNew');
+  if (fAll) fAll.className = guideFilter === 'all' ? 'cc-btn cc-btn-primary' : 'cc-btn cc-btn-subtle';
+  if (fNew) fNew.className = guideFilter === 'new' ? 'cc-btn cc-btn-primary' : 'cc-btn cc-btn-subtle';
+
+  const list = guideFilter === 'new' ? EVENTS.filter(e => NEW_EVENTS.includes(e.id)) : EVENTS;
+  document.getElementById('gcards').innerHTML = list.map(ev => {
     GS[ev.id] = GS[ev.id] || 1 + ((Math.random() * 1e6) | 0);
     const d = demoRun(ev, GS[ev.id]);
-    return '<div class="gc"><h3 style="color:' + ev.color + '">' + ev.name + '</h3><p>' + ev.desc + '</p>' +
+    const isNew = NEW_EVENTS.includes(ev.id);
+    const newBadge = isNew ? '<span style="background:rgba(168,85,247,.22); color:#c084fc; border:1px solid rgba(168,85,247,.5); font-size:0.7rem; padding:2px 7px; border-radius:99px; margin-left:8px; font-weight:700;">✨ NEW v1.2.0</span>' : '';
+    return '<div class="gc"><h3 style="color:' + ev.color + '">' + ev.name + newBadge + '</h3><p>' + ev.desc + '</p>' +
       (d ? '<div class="pair">' + miniBoard(d.a, null) + '<span>→</span>' + miniBoard(d.b, d.a) + '</div>' + (d.msg ? '<p class="gx">' + d.msg + '</p>' : '') + (d.fizzle ? '<p class="gx">Blocked by the safety rules on this demo board.</p>' : '') + (ev.id === 'fog' ? '<p class="gx">Black pieces are hidden from White for one move, then White pieces from Black.</p>' : '') : '<p class="gx">Needs a specific position to fire.</p>') +
       '<button type="button" data-ev="' + ev.id + '">Another example</button></div>';
   }).join('');
@@ -1634,6 +1726,29 @@ guideEl.addEventListener('click', e => {
   const b = e.target.closest('button[data-ev]'); if (!b) return;
   GS[b.dataset.ev] = 1 + ((Math.random() * 1e6) | 0); const y = guideEl.scrollTop; renderGuide(); guideEl.scrollTop = y;
 });
+
+const gfilterAll = document.getElementById('gfilterAll'), gfilterNew = document.getElementById('gfilterNew');
+if (gfilterAll) gfilterAll.addEventListener('click', () => renderGuide('all'));
+if (gfilterNew) gfilterNew.addEventListener('click', () => renderGuide('new'));
+
+const changelogEl = document.getElementById('changelog');
+function openChangelog() { if (changelogEl) { changelogEl.hidden = false; changelogEl.scrollTop = 0; } }
+function closeChangelog() { if (changelogEl) changelogEl.hidden = true; }
+
+const navChangelogBtn = document.getElementById('navChangelogBtn');
+if (navChangelogBtn) navChangelogBtn.addEventListener('click', openChangelog);
+
+const btnWhatsNew = document.getElementById('btnWhatsNew');
+if (btnWhatsNew) btnWhatsNew.addEventListener('click', openChangelog);
+
+const clclose = document.getElementById('clclose');
+if (clclose) clclose.addEventListener('click', closeChangelog);
+
+if (changelogEl) {
+  changelogEl.addEventListener('click', e => {
+    if (e.target === changelogEl) closeChangelog();
+  });
+}
 
 function attackersOf(b, r, f, by) {
   NR = b.length; const w = by === 'w', o = [];
